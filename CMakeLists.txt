@@ -1,11 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
-project(cgraph VERSION 1.0.0 DESCRIPTION "libcgraph for reeading compressed graphs")
+project(cgraph VERSION 1.0.0 DESCRIPTION "libcgraph for reading compressed graphs")
 
 set(CMAKE_C_STANDARD 11)
-
 # Error on undefined references
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-  set(CMAKE_SHARED_LINKER_FLAGS "-Wl,-undefined,error")
+  set(CMAKE_SHARED_LINKER_FLAGS "-Wl")
 else()
   set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--no-undefined")
 endif()
@@ -17,7 +16,7 @@ add_definitions(-D_LARGEFILE_SOURCE -D_LARGE_FILES -D_FILE_OFFSET_BITS=64)
 option(OPTIMIZE_FOR_NATIVE "Build with -march=native and -mtune=native" OFF)
 option(TRACE_SYMBOLS "Add the trace symbols for the panic function" ON)
 option(NO_MMAP "Do not read the compressed graph with mmap" OFF)
-option(WITH_RRR "Add support for bit sequences of type RRR" OFF)
+option(WITH_RRR "Add support for bit sequences of type RRR" ON)
 option(CLI "Enable the compilation of the command-line tool" ON)
 
 configure_file("include/cgraph.h.cmake" "${CMAKE_CURRENT_BINARY_DIR}/cgraph.h" @ONLY)
@@ -86,15 +85,18 @@ set(INCLUDES
   src/reader
   src/util
         /usr/local/include
-        /usr/local/include/serd-0/serd
+        #/usr/local/lib
+        #/usr/local/include/serd-0/serd
 )
 
+
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
+target_link_directories(${PROJECT_NAME} PRIVATE "/usr/local/lib")  # necessary on MAC to find libraries.
+
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE m) # link with math library
-target_link_libraries(${PROJECT_NAME} PRIVATE /usr/local/lib/libdivsufsort64.dylib)
-#target_link_libraries(${PROJECT_NAME} PRIVATE divsufsort64) # link with libdivsufsort to create the suffix array
+target_link_libraries(${PROJECT_NAME} PRIVATE divsufsort64) # link with libdivsufsort to create the suffix array
 
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER ${CMAKE_CURRENT_BINARY_DIR}/cgraph.h)
@@ -115,10 +117,11 @@ if(CLI)
   add_dependencies(cgraph-cli ${PROJECT_NAME}) # add library add dependency
 
   target_include_directories(cgraph-cli PRIVATE ${INCLUDES})
+  target_link_directories(cgraph-cli PRIVATE "/usr/local/lib")  # necessary on MAC to find libraries.
 
   target_link_libraries(cgraph-cli PRIVATE ${PROJECT_NAME})
-  target_link_libraries(cgraph-cli PRIVATE /usr/local/lib/libserd-0.dylib)
-  #target_link_libraries(cgraph-cli PRIVATE serd-0) # RDF-parser
+  target_link_libraries(cgraph-cli PRIVATE serd-0) # RDF-parser
+
 
   if(TRACE_SYMBOLS)
     target_link_options(cgraph-cli PRIVATE -rdynamic)
