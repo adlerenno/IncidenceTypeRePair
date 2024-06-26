@@ -373,7 +373,7 @@ CGraphEdgeIterator* cgraphr_edges(CGraphR* g, CGraphRank rank, CGraphEdgeLabel l
     if(!nb)
         return NULL;
 
-    grammar_neighborhood(gi->gr, false, rank, label, nodes, nb);
+    grammar_neighborhood(gi->gr, CGRAPH_NODE_QUERY, rank, label, nodes, nb);
 
     return (CGraphEdgeIterator*) nb;
 }
@@ -389,7 +389,19 @@ CGraphEdgeIterator* cgraphr_edges_by_predicate(CGraphR* g, CGraphEdgeLabel label
     if(!nb)
         return NULL;
 
-    grammar_neighborhood(gi->gr, true, CGRAPH_LABELS_ALL, label, NULL, nb);
+    grammar_neighborhood(gi->gr, CGRAPH_PREDICATE_QUERY, CGRAPH_LABELS_ALL, label, NULL, nb);
+
+    return (CGraphEdgeIterator*) nb;
+}
+
+CGraphEdgeIterator* cgraphr_edges_all(CGraphR* g) {
+    GraphReaderImpl* gi = (GraphReaderImpl*) g;
+
+    GrammarNeighborhood* nb = malloc(sizeof(*nb));
+    if(!nb)
+        return NULL;
+
+    grammar_neighborhood(gi->gr, CGRAPH_DECOMPRESS_QUERY, CGRAPH_LABELS_ALL, CGRAPH_LABELS_ALL, NULL, nb);
 
     return (CGraphEdgeIterator*) nb;
 }

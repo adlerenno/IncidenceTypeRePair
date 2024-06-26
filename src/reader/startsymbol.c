@@ -87,7 +87,7 @@ void startsymbol_destroy(StartSymbolReader* s) {
 	free(s);
 }
 
-void startsymbol_neighborhood(StartSymbolReader* s, bool predicate_query, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, StartSymbolNeighborhood* n) {
+void startsymbol_neighborhood(StartSymbolReader* s, int query_type, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, StartSymbolNeighborhood* n) {
 	n->s = s;
 //	if(node_src == node_dst)
 //		// If `node_src == node_dst` we do not have to check for edges, adjacent to the destination node,
@@ -117,15 +117,21 @@ void startsymbol_neighborhood(StartSymbolReader* s, bool predicate_query, CGraph
     {
         n->rank = CGRAPH_NODES_ALL;
     }
-    n->predicate_query = predicate_query;
+    n->query_type = query_type;
     n->label = label;
-    if (predicate_query)
+    switch (query_type)
     {
-        eliasfano_iter(s->labels, label, s->terminals + 1, &n->efit);
-    }
-	else
-    {
-        k2_iter_init_row(s->matrix, n->nodes[0], &n->it);
+        case CGRAPH_NODE_QUERY:
+            k2_iter_init_row(s->matrix, n->nodes[0], &n->it);
+            break;
+        case CGRAPH_PREDICATE_QUERY:
+            eliasfano_iter(s->labels, label, s->terminals + 1, &n->efit);
+            break;
+        default:
+        case CGRAPH_DECOMPRESS_QUERY:
+            startsymbol_iter(s->labels->n, &n->dit);
+            break;
+
     }
 }
 
@@ -211,32 +217,79 @@ static inline int get_edge(StartSymbolNeighborhood* n, uint64_t e, StEdge* edge)
 int startsymbol_neighborhood_next(StartSymbolNeighborhood* n, StEdge* edge) {
 	uint64_t neigh;
 	for(;;) {
-		switch(n->predicate_query ? eliasfano_iter_next(&n->efit, &neigh) : k2_iter_next(&n->it, &neigh)) {
-		case 0:
-			return 0;
-		case 1: {
-			switch(get_edge(n, neigh, edge)) {
-			case 0:
-				continue;
-			case 1:
-				return 1;
-			default:
-				return -1;
-			}
-		}
-		default:
-			return -1;
+        int res;
+        switch (n->query_type)
+        {
+            case CGRAPH_NODE_QUERY:
+                res = k2_iter_next(&n->it, &neigh);
+                break;
+            case CGRAPH_PREDICATE_QUERY:
+                res = eliasfano_iter_next(&n->efit, &neigh);
+                break;
+            default:
+            case CGRAPH_DECOMPRESS_QUERY:
+                res = startsymbol_next(&n->dit, &neigh);
+                break;
+        }
+		switch(res) {
+            case 0:
+                return 0;
+            case 1: {
+                switch(get_edge(n, neigh, edge)) {
+                case 0:
+                    continue;
+                case 1:
+                    return 1;
+                default:
+                    return -1;
+                }
+            }
+            default:
+                return -1;
 		}
 	}
 }
 
 void startsymbol_neighborhood_finish(StartSymbolNeighborhood* n) {
-    if (n->predicate_query)
+    switch (n->query_type)
     {
-        eliasfano_iter_finish(&n->efit);
+        case CGRAPH_NODE_QUERY:
+            k2_iter_finish(&n->it);
+            break;
+        case CGRAPH_PREDICATE_QUERY:
+            eliasfano_iter_finish(&n->efit);
+            break;
+        case CGRAPH_DECOMPRESS_QUERY:
+            startsymbol_finish(&n->dit);
+            break;
     }
-    else
-    {
-        k2_iter_finish(&n->it);
+}
+
+void startsymbol_iter(uint64_t edge_count, StartSymbolIterator* it) {
+    it->edge_count = edge_count;
+    it->edge_id = 0;
+    it->has_next = true;
+}
+
+// return value:
+// 1: next element exists
+// 0: no next element exists
+// -1: error occured
+int startsymbol_next(StartSymbolIterator* it, uint64_t* v) {
+    if(!it->has_next)
+        return -1;
+
+    int res = (it->edge_id < it->edge_count);
+    if(res != 1)
+        startsymbol_finish(it);
+
+    *v = it->edge_id;
+    it->edge_id++;
+    return res;
+}
+
+void startsymbol_finish(StartSymbolIterator * it) {
+    if(it->has_next) {
+        it->has_next = false;
     }
 }

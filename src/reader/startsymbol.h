@@ -14,6 +14,22 @@
 #include <cgraph.h>
 
 typedef struct {
+    uint64_t edge_count;
+    uint64_t edge_id;
+    bool has_next;
+} StartSymbolIterator;
+
+void startsymbol_iter(uint64_t edge_count, StartSymbolIterator* it);
+
+// return value:
+// 1: next element exists
+// 0: no next element exists
+// -1: error occured
+int startsymbol_next(StartSymbolIterator* it, uint64_t* v);
+void startsymbol_finish(StartSymbolIterator* it); // needed if the EliasFanoIterator was not iterated to the end
+
+
+typedef struct {
 	Reader r;
 
 	K2Reader* matrix;
@@ -44,15 +60,16 @@ typedef struct {
     CGraphEdgeLabel label;
     CGraphNode nodes[128];
 
-    bool predicate_query;
+    int query_type;
 	union {
         K2Iterator it;
         EliasFanoIterator efit;
+        StartSymbolIterator dit;
     };
 } StartSymbolNeighborhood;
 
 // `node_dst` and `label` are optional.
-void startsymbol_neighborhood(StartSymbolReader* s, bool predicate_query, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, StartSymbolNeighborhood* n);
+void startsymbol_neighborhood(StartSymbolReader* s, int query_type, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, StartSymbolNeighborhood* n);
 
 // return value:
 // 1: next element exists
@@ -60,5 +77,4 @@ void startsymbol_neighborhood(StartSymbolReader* s, bool predicate_query, CGraph
 // -1: error occured
 int startsymbol_neighborhood_next(StartSymbolNeighborhood* n, StEdge* edge);
 void startsymbol_neighborhood_finish(StartSymbolNeighborhood* n); // needed if not iterated to the end
-
 #endif

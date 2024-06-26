@@ -33,7 +33,7 @@ typedef struct {
 	RingQueue queue;
 } GrammarNeighborhood;
 
-void grammar_neighborhood(GrammarReader* g, bool predicate_query, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, GrammarNeighborhood* nb);
+void grammar_neighborhood(GrammarReader* g, int query_type, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, GrammarNeighborhood* nb);
 
 // return value:
 // 1: next element exists

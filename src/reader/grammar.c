@@ -92,7 +92,7 @@ void grammar_destroy(GrammarReader* g) {
 	free(g);
 }
 
-void grammar_neighborhood(GrammarReader* g, bool predicate_query, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, GrammarNeighborhood* nb) {
+void grammar_neighborhood(GrammarReader* g, int query_type, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, GrammarNeighborhood* nb) {
 	if(label != CGRAPH_LABELS_ALL && label >= g->rules->first_nt) { // label does not exists as a terminal so no neighbors exists
 		nb->has_next = false;
 		return;
@@ -104,7 +104,7 @@ void grammar_neighborhood(GrammarReader* g, bool predicate_query, CGraphRank ran
     nb->nodes = nodes;
 	nb->g = g;
 
-	startsymbol_neighborhood(g->start, predicate_query, rank, label, nodes, &nb->start);
+	startsymbol_neighborhood(g->start, query_type, rank, label, nodes, &nb->start);
 	ringqueue_init(&nb->queue, 0);
 }
 

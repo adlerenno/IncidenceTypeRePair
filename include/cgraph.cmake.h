@@ -67,6 +67,11 @@ typedef struct CGraphR_ CGraphR;
 
 #define CGRAPH_LABELS_ALL ((CGraphEdgeLabel) -1)
 #define CGRAPH_NODES_ALL ((CGraphNode) -1)
+
+#define CGRAPH_NODE_QUERY (0)
+#define CGRAPH_PREDICATE_QUERY (1)
+#define CGRAPH_DECOMPRESS_QUERY (2)
+
 /**
  * Type used as parameters for the functions to read a compressed graph.
  */
@@ -407,5 +412,14 @@ bool cgraphr_nodes_connected(CGraphR* g, CGraphRank rank, const CGraphNode* node
 */
 CGRAPH_API
 CGraphEdgeIterator* cgraphr_edges_by_predicate(CGraphR* g, CGraphEdgeLabel label);
+
+/**
+* Yields every edge that is in the graph. Can be used for decompression.
+*
+* @param g Handler of the graph reader.
+* @return
+*/
+CGRAPH_API
+CGraphEdgeIterator* cgraphr_edges_all(CGraphR* g);
 
 #endif

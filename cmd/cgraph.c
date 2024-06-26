@@ -583,9 +583,21 @@ static int do_compress(const char* input, const char* output, const CGraphArgs* 
 	if(argd->format)
 		syntax = get_format(argd->format);
 	else
-		syntax = guess_format(input);
+    {
+        syntax = guess_format(input);
+        if (argd->verbose && syntax)
+        {
+            printf("Guessing file format: %s\n", syntaxes[syntax].name);
+        }
+    }
 	if(!syntax)
-		syntax = SERD_TURTLE;
+    {
+        syntax = SERD_TURTLE;
+        if (argd->verbose)
+        {
+            printf("Guessing file format: %s\n", syntaxes[syntax].name);
+        }
+    }
 
 	if(argd->verbose) {
 		printf("Compression parameters:\n");
@@ -701,47 +713,42 @@ static int do_decompress(CGraphR* g, const char* output, const char* format, boo
     if (syntax == 5) // Syntax is hyperedge file
     {
         char *label, *txt;
-        size_t label_count = cgraphr_edge_label_count(g);
-        for (CGraphEdgeLabel l = 0; l < label_count; l++)
-        {
-            label = rdf_node(g, l, false, NULL);
-            CGraphEdgeIterator *it = cgraphr_edges_by_predicate(g, l);
-            if (!it) {
+        CGraphEdgeIterator *it = cgraphr_edges_all(g);
+        if (!it) {
+            goto exit_0;
+        }
+        uint64_t number_of_edges = 0;
+        CGraphEdge n;
+        while (cgraphr_edges_next(it, &n)) {
+            label = rdf_node(g, n.label, false, NULL);
+            //write label here.
+            if (fprintf(out_fd, "%s", label) == EOF)
+            {
                 free(label);
+                cgraphr_edges_finish(it);
                 goto exit_0;
             }
-
-            CGraphEdge n;
-            while (cgraphr_edges_next(it, &n)) {
-                //write label here.
-                if (fprintf(out_fd, "%s", label) == EOF)
-                {
-                    free(label);
-                    cgraphr_edges_finish(it);
-                    goto exit_0;
-                }
-                for (CGraphRank i = 0; i < n.rank; i++)
-                {
-                    txt = rdf_node(g, n.nodes[i], true, NULL);
-                    //Write empty space plus txt here;
-                    int suc = fprintf(out_fd, " %s", txt);
-                    if (suc  == EOF) {
-                        free(label);
-                        free(txt);
-                        cgraphr_edges_finish(it);
-                        goto exit_0;
-                    }
-                    free(txt);
-                }
-                if (fprintf(out_fd, "\n") == EOF)
-                {
-                    free(label);
-                    cgraphr_edges_finish(it);
-                    goto exit_0;
-                }
-            }
             free(label);
+            for (CGraphRank i = 0; i < n.rank; i++)
+            {
+                txt = rdf_node(g, n.nodes[i], true, NULL);
+                //Write empty space plus txt here;
+                int suc = fprintf(out_fd, " %s", txt);
+                if (suc  == EOF) {
+                    free(txt);
+                    cgraphr_edges_finish(it);
+                    goto exit_0;
+                }
+                free(txt);
+            }
+            if (fprintf(out_fd, "\n") == EOF)
+            {
+                cgraphr_edges_finish(it);
+                goto exit_0;
+            }
+            number_of_edges++;
         }
+        printf("Decompressed %llu edges.\n", number_of_edges);
         res = 0;
     }
     else {
@@ -1189,6 +1196,11 @@ static int do_read(const char* input, const CGraphArgs* argd) {
                     printf(",\t%" PRId64, ls.data[i].nodes[j]);
                 }
                 printf(")\n");
+            }
+
+            if (argd->verbose)
+            {
+                printf("Found %zu results", ls.len);
             }
 
             for (int i = 0; i < ls.len; i++)

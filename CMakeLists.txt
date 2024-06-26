@@ -19,7 +19,7 @@ option(NO_MMAP "Do not read the compressed graph with mmap" OFF)
 option(WITH_RRR "Add support for bit sequences of type RRR" ON)
 option(CLI "Enable the compilation of the command-line tool" ON)
 
-configure_file("include/cgraph.h.cmake" "${CMAKE_CURRENT_BINARY_DIR}/cgraph.h" @ONLY)
+configure_file("include/cgraph.cmake.h" "${CMAKE_CURRENT_BINARY_DIR}/cgraph.h" @ONLY)
 
 # get files with "find include src -type f -name '*.c' | sort"
 set(SOURCES
