@@ -15,6 +15,7 @@
 typedef struct {
 	uint64_t min_nt;
 	HGraph* start_symbol;
+    size_t* rank_of_terminal;
 
 	size_t rule_max; // eventuell entfernen?
 	size_t rules_cap;

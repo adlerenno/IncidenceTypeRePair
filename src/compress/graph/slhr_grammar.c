@@ -14,6 +14,17 @@ SLHRGrammar* slhr_grammar_init(HGraph* graph, uint64_t min_nt) {
 	SLHRGrammar* g = malloc(sizeof(*g));
 	if(!g)
 		return NULL;
+    size_t *rank_of_terminal = malloc(min_nt * sizeof(size_t));
+    if (!rank_of_terminal)
+    {
+        free(g);
+        return NULL;
+    }
+    g->rank_of_terminal = rank_of_terminal;
+    for (size_t i = 0; i < graph->len; i++)
+    {
+        rank_of_terminal[graph->edges[i]->label] = graph->edges[i]->rank;
+    }
 
 	g->min_nt = min_nt;
 	g->start_symbol = graph;
@@ -26,6 +37,8 @@ SLHRGrammar* slhr_grammar_init(HGraph* graph, uint64_t min_nt) {
 
 void slhr_grammar_destroy(SLHRGrammar* g) {
 	hgraph_destroy(g->start_symbol);
+    if (g->rank_of_terminal)
+        free(g->rank_of_terminal);
 	for(size_t i = 0; i < g->rules_cap; i++)
 		if(g->rules[i])
 			hgraph_destroy(g->rules[i]);
@@ -117,7 +130,9 @@ int slhr_grammar_rule_add(SLHRGrammar* g, uint64_t symbol, HGraph* graph) {
 
 int slhr_grammar_rank_of_rule(const SLHRGrammar* g, uint64_t symbol) {
 	if(symbol < g->min_nt)
-		return 2;
+    {
+        return (int) g->rank_of_terminal[symbol]; // TODO: Fix different types for rank.
+    }
 
 	assert(symbol >= g->min_nt);
 	symbol -= g->min_nt;
