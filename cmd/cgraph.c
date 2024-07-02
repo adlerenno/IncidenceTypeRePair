@@ -774,33 +774,26 @@ static int do_decompress(CGraphR* g, const char* output, const char* format, boo
         char *txt_s, *txt_p, *txt_o;
         SerdNode s, p, o;
 
-        size_t node_count = cgraphr_node_count(g);
-        for (size_t v = 0; v < node_count; v++) {
-            txt_s = rdf_node(g, v, true, &s);
-            CGraphNode nodes[] = {v, -1};
-            CGraphEdgeIterator *it = cgraphr_edges(g, 2, CGRAPH_LABELS_ALL, nodes);
-            if (!it) {
-                free(txt_s);
+        CGraphEdgeIterator *it = cgraphr_edges_all(g);
+        if (!it) {
+            goto exit_2;
+        }
+
+        CGraphEdge n;
+        while (cgraphr_edges_next(it, &n)) {
+            txt_s = rdf_node(g, n.nodes[0], true, &s);
+            txt_p = rdf_node(g, n.label, false, &p);
+            txt_o = rdf_node(g, n.nodes[1], true, &o);
+
+            int res = serd_writer_write_statement(writer, 0, &base, &s, &p, &o, NULL, NULL);
+            free(txt_s);
+            free(txt_p);
+            free(txt_o);
+
+            if (res != SERD_SUCCESS || err) {
+                cgraphr_edges_finish(it);
                 goto exit_2;
             }
-
-            CGraphEdge n;
-            while (cgraphr_edges_next(it, &n)) {
-                txt_p = rdf_node(g, n.label, false, &p);
-                txt_o = rdf_node(g, n.nodes[1], true, &o);
-
-                int res = serd_writer_write_statement(writer, 0, &base, &s, &p, &o, NULL, NULL);
-                free(txt_p);
-                free(txt_o);
-
-                if (res != SERD_SUCCESS || err) {
-                    free(txt_s);
-                    cgraphr_edges_finish(it);
-                    goto exit_2;
-                }
-            }
-
-            free(txt_s);
         }
 
         res = 0;
