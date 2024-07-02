@@ -125,7 +125,7 @@ void startsymbol_neighborhood(StartSymbolReader* s, int query_type, CGraphRank r
             k2_iter_init_row(s->matrix, n->nodes[0], &n->it);
             break;
         case CGRAPH_PREDICATE_QUERY:
-            eliasfano_iter(s->labels, label, s->terminals + 1, &n->efit);
+            eliasfano_iter(s->labels, label, s->terminals, &n->efit); //TODO: s->terminals + 1 seems to be wrong.
             break;
         default:
         case CGRAPH_DECOMPRESS_QUERY:
