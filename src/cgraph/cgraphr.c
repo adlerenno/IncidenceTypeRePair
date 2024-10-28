@@ -335,7 +335,7 @@ void cgraphr_edges_finish(CGraphEdgeIterator* it) {
 	free(it);
 }
 
-bool cgraphr_edge_exists(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes) {
+bool cgraphr_edge_exists(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, bool no_node_order) {
 	GraphReaderImpl* gi = (GraphReaderImpl*) g;
 
     for (int i = 0; i < rank; i++)
@@ -347,7 +347,14 @@ bool cgraphr_edge_exists(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, con
 		return false;
 
 	GrammarNeighborhood nb;
-	grammar_neighborhood(gi->gr, false, rank, label, nodes, &nb);
+    if (no_node_order)
+    {
+        grammar_neighborhood(gi->gr, CGRAPH_SET_QUERY, rank, label, nodes, &nb);
+    }
+    else
+    {
+        grammar_neighborhood(gi->gr, CGRAPH_NODE_QUERY, rank, label, nodes, &nb);
+    }
 
 	if(grammar_neighborhood_next(&nb, NULL)) {
 		grammar_neighborhood_finish(&nb);
@@ -359,7 +366,7 @@ bool cgraphr_edge_exists(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, con
 	return false;
 }
 
-CGraphEdgeIterator* cgraphr_edges(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes) {
+CGraphEdgeIterator* cgraphr_edges(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, bool no_node_order) {
     GraphReaderImpl* gi = (GraphReaderImpl*) g;
 
     for (int i=0; i < rank; i++)
@@ -373,7 +380,14 @@ CGraphEdgeIterator* cgraphr_edges(CGraphR* g, CGraphRank rank, CGraphEdgeLabel l
     if(!nb)
         return NULL;
 
-    grammar_neighborhood(gi->gr, CGRAPH_NODE_QUERY, rank, label, nodes, nb);
+    if (no_node_order)
+    {
+        grammar_neighborhood(gi->gr, CGRAPH_SET_QUERY, rank, label, nodes, nb);
+    }
+    else
+    {
+        grammar_neighborhood(gi->gr, CGRAPH_NODE_QUERY, rank, label, nodes, nb);
+    }
 
     return (CGraphEdgeIterator*) nb;
 }

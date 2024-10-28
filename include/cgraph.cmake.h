@@ -34,28 +34,37 @@ typedef struct CGraphW_ CGraphW;
 /**
  * Contains several parameters to influence the compression.
  */
-typedef struct {
-	// Maximum rank
-	int max_rank;
+typedef union {
+    struct {
+        // Maximum rank
+        int max_rank;
 
-	// Replace monograms
-	bool monograms;
+        // Replace monograms
+        bool monograms;
 
-	// Factor for bitsequences
-	int factor;
+        // Factor for bitsequences
+        int factor;
 
-	// Sampling for searching for nodes
-	int sampling;
+        // Sampling for searching for nodes
+        int sampling;
 
-	// Using the run-length encoding
-	bool rle;
+        // Using the run-length encoding
+        bool rle;
 
-	// Add the extra NT table
-	bool nt_table;
+        // Add the extra NT table
+        bool nt_table;
 #ifdef RRR
-	// Using bitsequences of type RRR
-	bool rrr;
+        // Using bitsequences of type RRR
+        bool rrr;
 #endif
+    };
+    struct {
+        // The nodes in hyperedge search command have no order.
+        bool no_hyperedge_order;
+
+        // Use quicksort to sort the resulting list of edges
+        bool sort_result;
+    };
 } CGraphCParams;
 
 /**
@@ -65,12 +74,13 @@ typedef struct {
  */
 typedef struct CGraphR_ CGraphR;
 
-#define CGRAPH_LABELS_ALL ((CGraphEdgeLabel) -1)
-#define CGRAPH_NODES_ALL ((CGraphNode) -1)
+#define CGRAPH_LABELS_ALL ((CGraphEdgeLabel) -1)  // Used for a not defined label.
+#define CGRAPH_NODES_ALL ((CGraphNode) -1)  // Used for a not defined node.
 
-#define CGRAPH_NODE_QUERY (0)
-#define CGRAPH_PREDICATE_QUERY (1)
-#define CGRAPH_DECOMPRESS_QUERY (2)
+#define CGRAPH_NODE_QUERY (0)  // Searches for edges that fit to the given pattern, that includes at least one node.
+#define CGRAPH_PREDICATE_QUERY (1)  // Searches for edges that have a given label (no nodes given).
+#define CGRAPH_DECOMPRESS_QUERY (2)  // Query to return all edges.
+#define CGRAPH_SET_QUERY (3)  // Query like CGRAPH_NODE_QUERY, but the order of nodes is not important in the pattern.
 
 /**
  * Type used as parameters for the functions to read a compressed graph.
@@ -334,11 +344,14 @@ CGraphNodeIterator* cgraphr_search_node(CGraphR* g, const char* p);
  * The values of the iterator can be iterated with the function `cgraphr_edge_next`.
  * 
  * @param g Handler of the graph reader.
- * @param n ID of an node.
+ * @param rank Array length of array nodes.
+ * @param label Label of queried edges.
+ * @param nodes Array of nodes.
+ * @param no_node_order Query checks only incidence of nodes, it does not check if they are at the given incidence type.
  * @return Iterator for the edges.
  */
 CGRAPH_API
-CGraphEdgeIterator* cgraphr_edges(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes);
+CGraphEdgeIterator* cgraphr_edges(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, bool no_node_order);
 
 /**
  * Determines the next element of the edge iterator.
@@ -368,13 +381,14 @@ void cgraphr_edges_finish(CGraphEdgeIterator* it);
  * Checks if the given edge exists in the graph.
  * 
  * @param g Handler of the graph reader.
- * @param node1 Source node of the edge.
- * @param node2 Destination node of the edge.
+ * @param rank Number of nodes in nodes, the array length.
  * @param label Edge label.
+ * @param nodes Array of nodes.
+ * @param no_node_order Query checks only incidence of nodes, it does not check if they are at the given incidence type.
  * @return `true` of the edge exists; else `false`.
  */
 CGRAPH_API
-bool cgraphr_edge_exists(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes);
+bool cgraphr_edge_exists(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, const CGraphNode* nodes, bool no_node_order);
 
 /**
  * Determines the edges with source node `node1` und destination node `node2`.

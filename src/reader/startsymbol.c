@@ -121,7 +121,7 @@ void startsymbol_neighborhood(StartSymbolReader* s, int query_type, CGraphRank r
     n->label = label;
     switch (query_type)
     {
-        case CGRAPH_NODE_QUERY:
+        case CGRAPH_NODE_QUERY: case CGRAPH_SET_QUERY:
             k2_iter_init_row(s->matrix, n->nodes[0], &n->it);
             break;
         case CGRAPH_PREDICATE_QUERY:
@@ -171,10 +171,11 @@ static inline int get_edge(StartSymbolNeighborhood* n, uint64_t e, StEdge* edge)
 	// determining the label of the edge
 	uint64_t label = eliasfano_get(s->labels, e);
 
+
 	if((expected_label = n->label) != CGRAPH_LABELS_ALL) {
 		uint64_t terminals = s->terminals;
 
-		// determine by the edge label, if the edge should be extracted
+		// determine by the edge label if the edge should be extracted
 		if(label < terminals) { // edge is a terminal edge
 			if(label != expected_label)
 				return 0; // return 0, because the edge label does not match with the expected label
@@ -182,7 +183,7 @@ static inline int get_edge(StartSymbolNeighborhood* n, uint64_t e, StEdge* edge)
 		else {
 			K2Reader* nt_table;
 			if((nt_table = s->nt_table) && !k2_get(nt_table, label - terminals, expected_label))
-				return 0; // return 0, because the nt edge does not produces a edge with the expected label
+				return 0; // return 0, because the nt edge does not produce an edge with the expected label
 		}
 	}
 
@@ -220,7 +221,7 @@ int startsymbol_neighborhood_next(StartSymbolNeighborhood* n, StEdge* edge) {
         int res;
         switch (n->query_type)
         {
-            case CGRAPH_NODE_QUERY:
+            case CGRAPH_NODE_QUERY: case CGRAPH_SET_QUERY:
                 res = k2_iter_next(&n->it, &neigh);
                 break;
             case CGRAPH_PREDICATE_QUERY:
@@ -253,7 +254,7 @@ int startsymbol_neighborhood_next(StartSymbolNeighborhood* n, StEdge* edge) {
 void startsymbol_neighborhood_finish(StartSymbolNeighborhood* n) {
     switch (n->query_type)
     {
-        case CGRAPH_NODE_QUERY:
+        case CGRAPH_NODE_QUERY: case CGRAPH_SET_QUERY:
             k2_iter_finish(&n->it);
             break;
         case CGRAPH_PREDICATE_QUERY:

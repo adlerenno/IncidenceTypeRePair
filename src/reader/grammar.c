@@ -125,10 +125,11 @@ static int decompress(GrammarNeighborhood* nb, HEdge* e, CGraphEdge* res) {
 			return 0;
         if(nb->rank != CGRAPH_NODES_ALL && nb->rank != e->rank)
             return 0;
-        for (int i=0; i<nb->rank; i++)
-        {
-            if(nb->nodes[i] != CGRAPH_NODES_ALL && e->nodes[i] != nb->nodes[i])
-                return 0;
+        if (nb->start.query_type == CGRAPH_NODE_QUERY || nb->start.query_type == CGRAPH_PREDICATE_QUERY) {
+            for (int i = 0; i < nb->rank; i++) {
+                if (nb->nodes[i] != CGRAPH_NODES_ALL && e->nodes[i] != nb->nodes[i])
+                    return 0;
+            }
         }
 
         if(res) { // res may be NULL
@@ -209,8 +210,8 @@ int grammar_neighborhood_next(GrammarNeighborhood* nb, CGraphEdge* n) {
 				grammar_neighborhood_finish(nb);
 				return 0;
 			case 1:
-				break;
-			default:
+				break;  // Found one possible edge in the start rule, process it.
+			default:  // Error case, it should not occur.
 				return -1;
 			}
 		}

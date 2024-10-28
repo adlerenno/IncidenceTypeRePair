@@ -78,6 +78,9 @@ static void print_usage(bool error) {
     "                                           this asks for all incoming edges of node 5.\n"
     "                                        Note that it is not allowed to pass no label and no nodes to this function.\n"
     "                                        Use --decompress in this case.\n"
+    "         --no-order                     Use this flag together with hyperedge to indicate \n"
+    "                                        that the order of nodes given to the hyperedge command is no"
+    "         --sort-result                  sort the resulting edges using quicksort."
 	"       --node-count                     returns the number of nodes in the graph\n"
 	"       --edge-labels                    returns the number of different edge labels in the graph\n"
 	;
@@ -112,6 +115,8 @@ enum opt {
 	OPT_R_SEARCH_NODE,
 	OPT_R_EDGES,
     OPT_R_HYPEREDGES,
+    OPT_R_NO_HYPEREDGE_ORDER,
+    OPT_R_SORT_RESULT,
 	OPT_R_NODE_COUNT,
 	OPT_R_EDGE_LABELS,
 };
@@ -258,6 +263,8 @@ static int parse_args(int argc, char** argv, CGraphArgs* argd) {
 		{"search-node", required_argument, 0, OPT_R_SEARCH_NODE},
 		{"edges", required_argument, 0, OPT_R_EDGES},
         {"hyperedges", required_argument, 0, OPT_R_HYPEREDGES},
+        {"no-order", no_argument, 0, OPT_R_NO_HYPEREDGE_ORDER},
+        {"sort-result", no_argument, 0, OPT_R_SORT_RESULT},
 		{"node-count", no_argument, 0, OPT_R_NODE_COUNT},
 		{"edge-labels", no_argument, 0, OPT_R_EDGE_LABELS},
 
@@ -380,6 +387,14 @@ static int parse_args(int argc, char** argv, CGraphArgs* argd) {
         case OPT_R_HYPEREDGES:
             check_mode(mode_compress, mode_read, false);
             add_command_str(argd, CMD_HYPEREDGES);
+            break;
+        case OPT_R_NO_HYPEREDGE_ORDER:
+            check_mode(mode_compress, mode_read, false);
+            argd->params.no_hyperedge_order = true;
+            break;
+        case OPT_R_SORT_RESULT:
+            check_mode(mode_compress, mode_read, false);
+            argd->params.sort_result = true;
             break;
 		case OPT_R_NODE_COUNT:
 			check_mode(mode_compress, mode_read, false);
@@ -534,7 +549,7 @@ exit_0:
 	return res;
 }
 
-#define MAX_LINE_LENGTH 1024
+#define MAX_LINE_LENGTH (8*LIMIT_MAX_RANK)  // With 8, it gives 1024 for a max_rank of 128.
 static int hyperedge_parse(const uint8_t* filename, SerdSyntax syntax, CGraphW* g) {
     int res = -1;
 
@@ -545,7 +560,7 @@ static int hyperedge_parse(const uint8_t* filename, SerdSyntax syntax, CGraphW* 
         return res;
 
     char line[MAX_LINE_LENGTH];
-    char* n[128];
+    char* n[LIMIT_MAX_RANK];
     size_t cn = 0;
     while (fgets(line, sizeof(line), in_fd) && !err) {
         cn = 0;
@@ -876,7 +891,7 @@ typedef struct {
     CGraphEdgeLabel label;
 
     /* The nodes of the edge. */
-    CGraphNode nodes[128];
+    CGraphNode nodes[LIMIT_MAX_RANK];
 } HyperedgeArg;
 
 int parse_hyperedge_arg(const char* s, HyperedgeArg* arg, bool* exists_query, bool* predicate_query) {
@@ -1157,7 +1172,7 @@ static int do_read(const char* input, const CGraphArgs* argd) {
             }
 
             if (exist_query) {
-                bool exists = cgraphr_edge_exists(g, arg.rank, arg.label, arg.nodes);
+                bool exists = cgraphr_edge_exists(g, arg.rank, arg.label, arg.nodes, argd->params.no_hyperedge_order);
                 printf("%d\n", exists ? 1 : 0);
                 res = 0;
                 break;
@@ -1169,7 +1184,7 @@ static int do_read(const char* input, const CGraphArgs* argd) {
             }
             else
             {
-                it = cgraphr_edges(g, arg.rank, arg.label, arg.nodes) ;
+                it = cgraphr_edges(g, arg.rank, arg.label, arg.nodes, argd->params.no_hyperedge_order) ;
             }
 
             if(!it)
@@ -1181,7 +1196,10 @@ static int do_read(const char* input, const CGraphArgs* argd) {
                 edge_append(&ls, &n);
 
             // sort the edges
-            qsort(ls.data, ls.len, sizeof(CGraphEdge), cmp_edge);
+            if (argd->params.sort_result)
+            {
+                qsort(ls.data, ls.len, sizeof(CGraphEdge), cmp_edge);
+            }
 
             for(size_t i = 0; i < ls.len; i++) {
                 printf("(%" PRId64, ls.data[i].label);
