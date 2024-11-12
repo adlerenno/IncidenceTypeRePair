@@ -16,6 +16,7 @@
 
 #include <cgraph.h>
 #include <constants.h>
+#include <microhttpd.h>
 #include "arith.h"
 
 // used to convert the default values of the compression to a string
@@ -119,6 +120,10 @@ enum opt {
     OPT_R_SORT_RESULT,
 	OPT_R_NODE_COUNT,
 	OPT_R_EDGE_LABELS,
+
+#ifdef WEB_SERVICE
+    OPT_R_PORT,
+#endif
 };
 
 typedef enum {
@@ -134,6 +139,9 @@ typedef enum {
     CMD_HYPEREDGES,
 	CMD_NODE_COUNT,
 	CMD_EDGE_LABELS,
+#ifdef WEB_SERVICE
+    CMD_WEB_SERVICE,
+#endif
 } CGraphCmd;
 
 typedef struct {
@@ -268,6 +276,10 @@ static int parse_args(int argc, char** argv, CGraphArgs* argd) {
 		{"node-count", no_argument, 0, OPT_R_NODE_COUNT},
 		{"edge-labels", no_argument, 0, OPT_R_EDGE_LABELS},
 
+#ifdef WEB_SERVICE
+        {"port", required_argument, 0, OPT_R_PORT},
+#endif
+
 		{0, 0, 0, 0}
 	};
 
@@ -287,6 +299,9 @@ static int parse_args(int argc, char** argv, CGraphArgs* argd) {
 #ifdef RRR
 	argd->params.rrr = DEFAULT_RRR;
 #endif
+#ifdef WEB_SERVICE
+    argd->params.port = DEFAULT_PORT;
+#endif
 	argd->command_count = 0;
 
 	uint64_t v;
@@ -298,7 +313,7 @@ static int parse_args(int argc, char** argv, CGraphArgs* argd) {
 			exit(0);
 			break;
 		case OPT_VERBOSE:
-			// TODO: only when compressing a graph
+			// TODO: only when compressing a graph, on reading there is no verbose yet.
 			argd->verbose = 1;
 			break;
 		case OPT_CR_FORMAT:
@@ -404,6 +419,14 @@ static int parse_args(int argc, char** argv, CGraphArgs* argd) {
 			check_mode(mode_compress, mode_read, false);
 			add_command_none(argd, CMD_EDGE_LABELS);
 			break;
+        case OPT_R_PORT: // TODO: Add CMD_SERVER via OPT_R_SERVER
+            check_mode(mode_compress, mode_read, false);
+            if(parse_optarg_int(&v) < 0 && v >= 0) {
+                fprintf(stderr, "sampling: expected natural number or 0\n");
+                return -1;
+            }
+            argd->params.port = v;
+            break;
 		case '?':
 		case ':':
 		default:
@@ -825,6 +848,76 @@ exit_0:
 	return res;
 }
 
+#ifdef WEB_SERVICE
+static enum MHD_Result
+generate_server_answer(void * cls,
+         struct MHD_Connection * connection,
+         const char * url,
+         const char * method,
+         const char * version,
+         const char * upload_data,
+         size_t * upload_data_size,
+         void ** ptr) {
+
+    static int dummy;
+    const CGraphArgs *argd = cls;
+    struct MHD_Response *response;
+    int ret;
+
+    // TODO: generate answer
+    /*if (0 != strcmp(method, "GET"))
+        return MHD_NO; *//* unexpected method *//*
+    if (&dummy != *ptr) {
+        *//* The first time only the headers are valid,
+           do not respond in the first round... *//*
+        *ptr = &dummy;
+        return MHD_YES;
+    }
+    if (0 != *upload_data_size)
+        return MHD_NO; *//* upload data in a GET!? */
+    const char *sparql_query;
+    if (strcmp(method, "POST") == 0) {
+        sparql_query = strndup(upload_data, *upload_data_size);
+    } else
+    if (strcmp(method, "GET") == 0) {
+        sparql_query = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "query");
+    } else {
+        return MHD_NO;
+    }
+    parse_sparql_query(sparql_query);
+
+    *ptr = NULL; /* clear context pointer */
+    response = MHD_create_response_from_buffer(strlen("page"),
+                                               (void *) "page",
+                                               MHD_RESPMEM_PERSISTENT);
+    ret = MHD_queue_response(connection,
+                             MHD_HTTP_OK,
+                             response);
+    MHD_destroy_response(response);
+    return ret;
+}
+
+static void do_webservice(CGraphR* g, const CGraphArgs* argd) {
+    struct MHD_Daemon * d;
+    d = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION,
+                         argd->params.port,
+                         NULL,
+                         NULL,
+                         &generate_server_answer,
+                         argd,
+                         MHD_OPTION_END);
+    if (d == NULL)
+    {
+        fprintf(stderr, "Failed to start Webserver daemon.");
+        return;
+    }
+    if (argd->verbose)
+        printf("Server started on port %d. Type %c to quit.", argd->params.port, DEFAULT_QUIT_SERVER_CHAR);
+    while (getc (stdin) != DEFAULT_QUIT_SERVER_CHAR) {}
+    MHD_stop_daemon(d);
+}
+#endif
+
 // ******* Helper functions *******
 
 typedef struct {
@@ -946,6 +1039,98 @@ int parse_hyperedge_arg(const char* s, HyperedgeArg* arg, bool* exists_query, bo
     exit:
     arg->rank = rank;
     arg->label = label;
+    return 0;
+}
+
+typedef struct {
+    /* Should output node. */
+    bool output_s;
+    bool output_p;
+    bool output_o;
+
+    /* The nodes of the requested triples. */
+    char *subject;
+    char *predicate;
+    char *object;
+} SPARQLArg;
+
+int parse_sparql_arg(const char* query, SPARQLArg * arg, bool* existence_query, bool* predicate_query, bool* decompression_query) {
+    arg->output_s = false;
+    arg->output_p = false;
+    arg->output_o = false;
+    *existence_query = true;
+    *predicate_query = true;
+    *decompression_query = true;
+
+    // Step 1: Check if the query starts with "SELECT"
+    if (strncmp(query, "SELECT", 6) != 0) {
+        // printf("Query must start with 'SELECT'\n");
+        return 1;
+    }
+
+    // Step 2: Find the WHERE clause
+    const char *end = strstr(query, "WHERE"); // Find position of WHERE.
+    if (!end) {
+        // printf("Query must contain a 'WHERE' clause\n");
+        return 1;
+    }
+
+    // Step 3: Extract the SELECT clause content
+    const char *start = query + 6; // Skip the SELECT
+
+    char content[LINE_MAX];
+    strncpy(content, start + 1, end - start - 1);
+    content[end - start - 1] = '\0';
+    char *token = strtok(content, SPARQL_WHITESPACE_CHARS);
+    while (token != NULL)
+    {
+        if (strcmp(token, "?s"))
+            arg->output_s = true;
+        else if (strcmp(token, "?p"))
+            arg->output_p = true;
+        else if (strcmp(token, "?o"))
+            arg->output_o = true;
+    }
+
+    // Step 4: Extract the WHERE clause content
+    start = strchr(end, '{');
+    end = strchr(end, '}');
+    if (!start || !end || start <= end) {
+        // printf("WHERE clause must contain '{' and '}' with triple pattern\n");
+        return 1;
+    }
+
+    // Copy the WHERE clause content between braces
+    strncpy(content, start + 1, end - start - 1);
+    content[end - start - 1] = '\0';
+
+    // Step 4a: Tokenize WHERE clause and assign values to s, p, o
+    token = strtok(content, SPARQL_WHITESPACE_CHARS);
+    if (strcmp(token, "?s")) {
+        existence_query = false;
+        arg->subject = NULL;
+    } else {
+        predicate_query = false;
+        decompression_query = false;
+        arg->subject = token;
+    }
+    token = strtok(NULL, SPARQL_WHITESPACE_CHARS);
+    if (strcmp(token, "?p")) {
+        existence_query = false;
+        arg->predicate = NULL;
+    } else {
+        decompression_query = false;
+        arg->predicate = token;
+    }
+    token = strtok(NULL, SPARQL_WHITESPACE_CHARS);
+    if (strcmp(token, "?o")) {
+        existence_query = false;
+        arg->object = NULL;
+    } else {
+        predicate_query = false;
+        decompression_query = false;
+        arg->object = token;
+    }
     return 0;
 }
 
@@ -1125,6 +1310,7 @@ static int do_read(const char* input, const CGraphArgs* argd) {
 			break;
 		}
 		case CMD_EDGES:
+            // fallthrough
 //        {
 //			EdgeArg arg;
 //			if(parse_edge_arg(cmd->arg_str, &arg) < 0) {
@@ -1232,6 +1418,12 @@ static int do_read(const char* input, const CGraphArgs* argd) {
 			printf("%zu\n", cgraphr_edge_label_count(g));
 			res = 0;
 			break;
+#ifdef WEB_SERVICE
+        case CMD_WEB_SERVICE:
+            do_webservice(g, argd);
+            goto exit;
+            break;
+#endif
 		case CMD_NONE:
 			goto exit;
 		}	

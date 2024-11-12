@@ -13,11 +13,12 @@ endif()
 add_definitions(-D_LARGEFILE_SOURCE -D_LARGE_FILES -D_FILE_OFFSET_BITS=64)
 
 # Possibility to enable -march=native to increase performance of popcount
-option(OPTIMIZE_FOR_NATIVE "Build with -march=native and -mtune=native" OFF)
+option(OPTIMIZE_FOR_NATIVE "Build with -march=native and -mtune=native" ON)
 option(TRACE_SYMBOLS "Add the trace symbols for the panic function" ON)
 option(NO_MMAP "Do not read the compressed graph with mmap" OFF)
 option(WITH_RRR "Add support for bit sequences of type RRR" ON)
 option(CLI "Enable the compilation of the command-line tool" ON)
+option(WEB_SERVICE "Enable the compilation of the web-service" ON)
 
 configure_file("include/cgraph.cmake.h" "${CMAKE_CURRENT_BINARY_DIR}/cgraph.h" @ONLY)
 
@@ -72,6 +73,12 @@ if(WITH_RRR)
   )
 endif()
 
+if(WEB_SERVICE)
+  add_definitions(-DWEB_SERVICE)
+  list(APPEND SOURCES
+  )
+endif()
+
 if(NOT NO_MMAP)
   add_definitions(-DUSE_MMAP)
 endif()
@@ -85,8 +92,6 @@ set(INCLUDES
   src/reader
   src/util
         /usr/local/include
-        #/usr/local/lib
-        #/usr/local/include/serd-0/serd
 )
 
 
@@ -113,14 +118,17 @@ endif()
 
 # CLI
 if(CLI)
-  add_executable(cgraph-cli cmd/cgraph.c)
-  add_dependencies(cgraph-cli ${PROJECT_NAME}) # add library add dependency
+  add_executable(${PROJECT_NAME}-cli cmd/cgraph.c)
+  add_dependencies(${PROJECT_NAME}-cli ${PROJECT_NAME}) # add library add dependency
 
-  target_include_directories(cgraph-cli PRIVATE ${INCLUDES})
-  target_link_directories(cgraph-cli PRIVATE "/usr/local/lib")  # necessary on MAC to find libraries.
+  target_include_directories(${PROJECT_NAME}-cli PRIVATE ${INCLUDES})
+  target_link_directories(${PROJECT_NAME}-cli PRIVATE "/usr/local/lib")  # necessary on MAC to find libraries.
 
-  target_link_libraries(cgraph-cli PRIVATE ${PROJECT_NAME})
-  target_link_libraries(cgraph-cli PRIVATE serd-0) # RDF-parser
+  target_link_libraries(${PROJECT_NAME}-cli PRIVATE ${PROJECT_NAME})
+  target_link_libraries(${PROJECT_NAME}-cli PRIVATE serd-0) # RDF-parser
+  if(WEB_SERVICE)
+    target_link_libraries(${PROJECT_NAME}-cli PRIVATE microhttpd)
+  endif ()
 
 
   if(TRACE_SYMBOLS)

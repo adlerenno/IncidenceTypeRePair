@@ -2,30 +2,37 @@
 
 **Autor:** FR, EA
 
-libcgraph is a C-library to compress and search in labeled graphs, especially in RDF-graphs.
+libcgraph is a C-library to compress and search in labeled graphs and labeled hypergraphs.
 
 The library should run on Linux and macOS, it is not supported on Windows.
 
-If you have questions regarding the implementation, feel free to contacht adlerenno.
+If you have questions regarding the implementation, feel free to contact adlerenno.
 
 ## Dependencies
 
 - [libdivsufsort](https://github.com/y-256/libdivsufsort) to create the suffix-array
-    - brew tap brewsci/bio
-    - brew install Formula/libdivsufsort
+  - Using Homebrew
+    - brew install libdivsufsort
+  - Using bash:
+    - git clone https://github.com/y-256/libdivsufsort.git
+    - cd libdivsufsort
+    - mkdir build
+    - cd build
+    - cmake -DCMAKE_BUILD_TYPE="Release" -DCMAKE_INSTALL_PREFIX="/usr/local" ..
+    - make
+    - sudo make install
     
 - [serd](https://github.com/drobilla/serd) needed by the command-line-tool to read RDF-graphs
+  - Using homebrew
     - brew install serd
-- On some systems it might be necessary to adjust the CMakeLists file.
-  - set(INCLUDES
-  - ${CMAKE_CURRENT_BINARY_DIR}
-  - src/bits
-  - ...
-  - /usr/local/include <- new added path to folder with divsufsort64.h
-  - /usr/local/include/serd-0/serd <- new added path to folder with serd-0.h
-  - ) # End of INCLUDES
-  - target_link_libraries(${PROJECT_NAME} PRIVATE libdivsufsort64.dylib) # link with libdivsufsort to create the suffix array  <- change path here to /usr/local/lib/libdivsufsort64.dylib
-  - target_link_libraries(cgraph-cli PRIVATE libserd-0.dylib) # RDF-parser <- change path here to /usr/local/lib/libserd-0.dylib
+  - Using apt-get
+    - sudo apt-get install libserd-0-0
+
+- [libmicrohttpd]() needed by the webservice for the server
+  - Using homebrew
+    - brew install libmicrohttpd
+  - Using apt-get
+    - sudo apt-get install libmicrohttpd-dev
 
 ## Build
 
@@ -40,11 +47,12 @@ make
 
 The following parameters can be passed to CMake:
 
-- `-DCMAKE_BUILD_TYPE=Release` aktiviert Compiler-Optimierungen
-- `-DOPTIMIZE_FOR_NATIVE=on` aktiviert prozessorspezifische Instruktionen, sodass z.B. optimierte Instruktionen für `popcnt` aktiviert werden
-- `-DNO_MMAP=on` aktiviert das Lesen der Datei des komprimierten Graphen mit `read`-Systemaufrufen inkl. eines Caches anstelle von `mmap`
-- `-DWITH_RRR=on` aktiviert die Unterstüzung für Bitsequenzen vom Typ RRR (siehe unten) 
-- `-DCLI=off` deaktiviert das Erstellen des Command-Line-Tools
+- `-DCMAKE_BUILD_TYPE=Release` activates compiler optimizations
+- `-DOPTIMIZE_FOR_NATIVE=on` activates optimized processor functions, for example the more efficient `popcnt`-variants
+- `-DNO_MMAP=on` read files using `read`-system-calls instead of `mmap`
+- `-DWITH_RRR=on` activates the support for RRR bitsequences, but increases the library size significantly due to static tables. 
+- `-DCLI=on` activates the compilation of the command-line-tool.
+- `-DWEB_SERVICE=on` activates the compilation of the web-service. Needs the command-line-tool.
 
 The library will be in the build-directory as "libcgraph.1.0.0.dylib" (macOS) or "libcgraph.so.1.0.0" (Linux).
 The command-line-tool is in the build-directory as well and is called "cgraph-cli".
@@ -112,7 +120,12 @@ Usage: cgraph-cli
        --edge-labels                    returns the number of different edge labels in the graph\n"
 ```
 
-The command-line-tool allows via serd the Turtle, TriG, NTriples and NQuads formats for RDF-graphs. Additionally, there is a parser for hypergraphs. The formatting of a hypergraph file is one edge per line, each line starts with the label of the edge and is followed by the name of the nodes. The elements in a line can be seprarated by a white space or a tab. Note that the nodes are treated as named, so numbers would be inserted as names into the dictionary and the internally used numbers can differ.
+The command-line-tool allows via serd the Turtle, TriG, NTriples and NQuads formats for RDF-graphs. Additionally, there is a parser for hypergraphs. 
+The formatting of a hypergraph file is one edge per line, 
+each line starts with the label of the edge and is followed by the name of the nodes. 
+The elements in a line can be separated by a white space or a tab. 
+Note that the nodes are treated as named, 
+so numbers would be inserted as names into the dictionary and the internally used numbers can differ.
 
 ## Library
 

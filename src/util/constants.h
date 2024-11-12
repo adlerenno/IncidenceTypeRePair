@@ -30,6 +30,15 @@
 #define DEFAULT_RRR (false)
 #endif
 
+#ifdef WEB_SERVICE
+// Default Port for Web Service
+#define DEFAULT_PORT 8080
+#define DEFAULT_QUIT_SERVER_CHAR ('q')
+#endif
+
+// SPARQL Whitespace Characters. Only ' ' would allow parsing form command line.
+#define SPARQL_WHITESPACE_CHARS (" \t\n_")
+
 // Magic number of the compressed graph file
 #define MAGIC_GRAPH "CGRAPH1\x00"
 #define MAGIC_GRAPH_LEN (strlen(MAGIC_GRAPH) + 1)

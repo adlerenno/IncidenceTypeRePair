@@ -34,37 +34,40 @@ typedef struct CGraphW_ CGraphW;
 /**
  * Contains several parameters to influence the compression.
  */
-typedef union {
-    struct {
-        // Maximum rank
-        int max_rank;
+typedef struct {
+    ///////////// Compress Parameters //////////////
+    // Maximum rank
+    int max_rank;
 
-        // Replace monograms
-        bool monograms;
+    // Replace monograms
+    bool monograms;
 
-        // Factor for bitsequences
-        int factor;
+    // Factor for bitsequences
+    int factor;
 
-        // Sampling for searching for nodes
-        int sampling;
+    // Sampling for searching for nodes
+    int sampling;
 
-        // Using the run-length encoding
-        bool rle;
+    // Using the run-length encoding
+    bool rle;
 
-        // Add the extra NT table
-        bool nt_table;
+    // Add the extra NT table
+    bool nt_table;
 #ifdef RRR
-        // Using bitsequences of type RRR
-        bool rrr;
+    // Using bitsequences of type RRR
+    bool rrr;
 #endif
-    };
-    struct {
-        // The nodes in hyperedge search command have no order.
-        bool no_hyperedge_order;
+    ///////////// Read Parameters //////////////////
 
-        // Use quicksort to sort the resulting list of edges
-        bool sort_result;
-    };
+    // The nodes in hyperedge search command have no order.
+    bool no_hyperedge_order;
+
+    // Use quicksort to sort the resulting list of edges
+    bool sort_result;
+
+    ///////////// WebService Parameters ////////////
+    // Port the webserver uses.
+    uint16_t port;
 } CGraphCParams;
 
 /**
