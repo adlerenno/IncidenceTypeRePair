@@ -18,7 +18,7 @@ option(TRACE_SYMBOLS "Add the trace symbols for the panic function" ON)
 option(NO_MMAP "Do not read the compressed graph with mmap" OFF)
 option(WITH_RRR "Add support for bit sequences of type RRR" ON)
 option(CLI "Enable the compilation of the command-line tool" ON)
-option(WEB_SERVICE "Enable the compilation of the web-service" ON)
+option(WEB_SERVICE "Enable the compilation of the web-service" OFF)
 
 configure_file("include/cgraph.cmake.h" "${CMAKE_CURRENT_BINARY_DIR}/cgraph.h" @ONLY)
 
@@ -75,8 +75,6 @@ endif()
 
 if(WEB_SERVICE)
   add_definitions(-DWEB_SERVICE)
-  list(APPEND SOURCES
-  )
 endif()
 
 if(NOT NO_MMAP)

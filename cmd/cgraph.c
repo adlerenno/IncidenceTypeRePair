@@ -1253,10 +1253,10 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
     int ret;
 
     const char *sparql_query = NULL;
+    char client_ip[INET6_ADDRSTRLEN];
     if (strcmp(method, "POST") == 0) {
         if (argd->verbose)
         {
-            char client_ip[INET6_ADDRSTRLEN];
             ip_of_client(connection, client_ip);
             printf("Query via POST from %s\n", client_ip);
         }
@@ -1264,7 +1264,6 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
     } else if (strcmp(method, "GET") == 0) {
         if (argd->verbose)
         {
-            char client_ip[INET6_ADDRSTRLEN];
             ip_of_client(connection, client_ip);
             printf("Query via GET from %s\n", client_ip);
         }
@@ -1310,6 +1309,10 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
     do_search(g, 2, p_id, nodes, existence_query, predicate_query, false, false, &ls);
 
     empty_answer:;  // position to jump to, if lookup failed.
+    if (argd->verbose)
+    {
+        printf("Found %zu answers to %s query.\n", ls.len, client_ip);
+    }
     size_t json_length = 1024 + ls.len * 100;  // Adjust size if needed
     char *json = malloc(json_length);
     signed int json_current_position = 0;
