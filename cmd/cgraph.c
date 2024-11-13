@@ -16,7 +16,13 @@
 
 #include <cgraph.h>
 #include <constants.h>
+
+#ifdef WEB_SERVICE
 #include <microhttpd.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#endif
+
 #include "arith.h"
 
 // used to convert the default values of the compression to a string
@@ -419,8 +425,9 @@ static int parse_args(int argc, char** argv, CGraphArgs* argd) {
 			check_mode(mode_compress, mode_read, false);
 			add_command_none(argd, CMD_EDGE_LABELS);
 			break;
-        case OPT_R_PORT: // TODO: Add CMD_SERVER via OPT_R_SERVER
+        case OPT_R_PORT:
             check_mode(mode_compress, mode_read, false);
+            add_command_none(argd, CMD_WEB_SERVICE);
             if(parse_optarg_int(&v) < 0 && v >= 0) {
                 fprintf(stderr, "sampling: expected natural number or 0\n");
                 return -1;
@@ -849,6 +856,12 @@ exit_0:
 }
 
 #ifdef WEB_SERVICE
+
+struct MHDParams {
+    const CGraphArgs *argd;
+    CGraphR* graph;
+};
+
 static enum MHD_Result
 generate_server_answer(void * cls,
          struct MHD_Connection * connection,
@@ -857,54 +870,17 @@ generate_server_answer(void * cls,
          const char * version,
          const char * upload_data,
          size_t * upload_data_size,
-         void ** ptr) {
-
-    static int dummy;
-    const CGraphArgs *argd = cls;
-    struct MHD_Response *response;
-    int ret;
-
-    // TODO: generate answer
-    /*if (0 != strcmp(method, "GET"))
-        return MHD_NO; *//* unexpected method *//*
-    if (&dummy != *ptr) {
-        *//* The first time only the headers are valid,
-           do not respond in the first round... *//*
-        *ptr = &dummy;
-        return MHD_YES;
-    }
-    if (0 != *upload_data_size)
-        return MHD_NO; *//* upload data in a GET!? */
-    const char *sparql_query;
-    if (strcmp(method, "POST") == 0) {
-        sparql_query = strndup(upload_data, *upload_data_size);
-    } else
-    if (strcmp(method, "GET") == 0) {
-        sparql_query = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "query");
-    } else {
-        return MHD_NO;
-    }
-    parse_sparql_query(sparql_query);
-
-    *ptr = NULL; /* clear context pointer */
-    response = MHD_create_response_from_buffer(strlen("page"),
-                                               (void *) "page",
-                                               MHD_RESPMEM_PERSISTENT);
-    ret = MHD_queue_response(connection,
-                             MHD_HTTP_OK,
-                             response);
-    MHD_destroy_response(response);
-    return ret;
-}
+         void ** ptr);
 
 static void do_webservice(CGraphR* g, const CGraphArgs* argd) {
     struct MHD_Daemon * d;
+    struct MHDParams params = {argd, g};
     d = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION,
                          argd->params.port,
                          NULL,
                          NULL,
                          &generate_server_answer,
-                         argd,
+                         &params,
                          MHD_OPTION_END);
     if (d == NULL)
     {
@@ -912,7 +888,7 @@ static void do_webservice(CGraphR* g, const CGraphArgs* argd) {
         return;
     }
     if (argd->verbose)
-        printf("Server started on port %d. Type %c to quit.", argd->params.port, DEFAULT_QUIT_SERVER_CHAR);
+        printf("Server started on port %d. Type %c to quit.\n", argd->params.port, DEFAULT_QUIT_SERVER_CHAR);
     while (getc (stdin) != DEFAULT_QUIT_SERVER_CHAR) {}
     MHD_stop_daemon(d);
 }
@@ -1054,7 +1030,8 @@ typedef struct {
     char *object;
 } SPARQLArg;
 
-int parse_sparql_arg(const char* query, SPARQLArg * arg, bool* existence_query, bool* predicate_query, bool* decompression_query) {
+int parse_sparql_arg(const char *query, SPARQLArg *arg, bool *existence_query, bool *predicate_query,
+                     bool *decompression_query) {
     arg->output_s = false;
     arg->output_p = false;
     arg->output_o = false;
@@ -1084,51 +1061,52 @@ int parse_sparql_arg(const char* query, SPARQLArg * arg, bool* existence_query, 
     char *token = strtok(content, SPARQL_WHITESPACE_CHARS);
     while (token != NULL)
     {
-        if (strcmp(token, "?s"))
+        if (strcmp(token, "?s") == 0)
             arg->output_s = true;
-        else if (strcmp(token, "?p"))
+        else if (strcmp(token, "?p") == 0)
             arg->output_p = true;
-        else if (strcmp(token, "?o"))
+        else if (strcmp(token, "?o") == 0)
             arg->output_o = true;
+        token = strtok(NULL, SPARQL_WHITESPACE_CHARS);
     }
 
     // Step 4: Extract the WHERE clause content
     start = strchr(end, '{');
     end = strchr(end, '}');
-    if (!start || !end || start <= end) {
+    if (!start || !end || start > end) {
         // printf("WHERE clause must contain '{' and '}' with triple pattern\n");
         return 1;
     }
 
     // Copy the WHERE clause content between braces
-    strncpy(content, start + 1, end - start - 1);
+    strncpy(content, start + 1, end - start - 2);
     content[end - start - 1] = '\0';
 
     // Step 4a: Tokenize WHERE clause and assign values to s, p, o
     token = strtok(content, SPARQL_WHITESPACE_CHARS);
-    if (strcmp(token, "?s")) {
-        existence_query = false;
+    if (strcmp(token, "?s") == 0) {
+        *existence_query = false;
         arg->subject = NULL;
     } else {
-        predicate_query = false;
-        decompression_query = false;
+        *predicate_query = false;
+        *decompression_query = false;
         arg->subject = token;
     }
     token = strtok(NULL, SPARQL_WHITESPACE_CHARS);
-    if (strcmp(token, "?p")) {
-        existence_query = false;
+    if (strcmp(token, "?p") == 0) {
+        *existence_query = false;
         arg->predicate = NULL;
     } else {
-        decompression_query = false;
+        *decompression_query = false;
         arg->predicate = token;
     }
     token = strtok(NULL, SPARQL_WHITESPACE_CHARS);
-    if (strcmp(token, "?o")) {
-        existence_query = false;
+    if (strcmp(token, "?o") == 0) {
+        *existence_query = false;
         arg->object = NULL;
     } else {
-        predicate_query = false;
-        decompression_query = false;
+        *predicate_query = false;
+        *decompression_query = false;
         arg->object = token;
     }
     return 0;
@@ -1216,6 +1194,196 @@ void edge_append(EdgeList* l, CGraphEdge* e) {
 
 	l->data[l->len++] = *e;
 }
+
+bool do_search(CGraphR* g, CGraphRank rank, CGraphEdgeLabel label, CGraphNode* nodes, bool exist_query, bool predicate_query, bool no_hyperedge_order, bool sort_result, EdgeList* result)
+{
+    if (exist_query) {
+        return cgraphr_edge_exists(g, rank, label, nodes, no_hyperedge_order);
+    }
+    CGraphEdgeIterator* it;
+    if (predicate_query)
+    {
+        it = cgraphr_edges_by_predicate(g, label);
+    }
+    else
+    {
+        it = cgraphr_edges(g, rank, label, nodes, no_hyperedge_order) ;
+    }
+
+    if(!it)
+        return false;
+
+    CGraphEdge n;
+    while(cgraphr_edges_next(it, &n))
+        edge_append(result, &n);
+
+    // sort the edges
+    if (sort_result)
+    {
+        qsort(result->data, result->len, sizeof(CGraphEdge), cmp_edge);
+    }
+    return result->len > 0;
+}
+
+#ifdef WEB_SERVICE
+void ip_of_client(struct MHD_Connection *connection, char* client_ip)
+{
+    const union MHD_ConnectionInfo *conn_info = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+    if (conn_info && conn_info->client_addr) {
+
+        // Check if the address is IPv4 or IPv6 and convert it to a string
+        // Check if it's an IPv4 or IPv6 address and convert it to string
+        if (conn_info->client_addr->sa_family == AF_INET) {
+            struct sockaddr_in *addr_in = (struct sockaddr_in *)conn_info->client_addr;
+            inet_ntop(AF_INET, &(addr_in->sin_addr), client_ip, INET_ADDRSTRLEN);
+        } else if (conn_info->client_addr->sa_family == AF_INET6) {
+            struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *)conn_info->client_addr;
+            inet_ntop(AF_INET6, &(addr_in6->sin6_addr), client_ip, INET6_ADDRSTRLEN);
+        }
+    }
+}
+
+enum MHD_Result
+generate_server_answer(void *cls, struct MHD_Connection *connection, const char *url, const char *method,
+                       const char *version, const char *upload_data, size_t *upload_data_size, void **ptr) {
+
+    const CGraphArgs *argd = ((struct MHDParams *)cls)->argd;
+    CGraphR* g = ((struct MHDParams *) cls)->graph;
+    struct MHD_Response *response;
+    int ret;
+
+    const char *sparql_query = NULL;
+    if (strcmp(method, "POST") == 0) {
+        if (argd->verbose)
+        {
+            char client_ip[INET6_ADDRSTRLEN];
+            ip_of_client(connection, client_ip);
+            printf("Query via POST from %s\n", client_ip);
+        }
+        sparql_query = strndup(upload_data, *upload_data_size);
+    } else if (strcmp(method, "GET") == 0) {
+        if (argd->verbose)
+        {
+            char client_ip[INET6_ADDRSTRLEN];
+            ip_of_client(connection, client_ip);
+            printf("Query via GET from %s\n", client_ip);
+        }
+        sparql_query = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "query");
+    }
+    if (sparql_query == NULL)
+    {
+        return MHD_NO;
+    }
+
+    SPARQLArg sparqlArg;
+    bool existence_query, predicate_query, decompression_query;
+
+    // Checks for correct parsing here.
+    if (parse_sparql_arg(sparql_query, &sparqlArg, &existence_query, &predicate_query, &decompression_query) != 0) {
+        return MHD_NO;
+    }
+
+    EdgeList ls = {0};
+    CGraphNode s_id = CGRAPH_NODES_ALL;
+    CGraphEdgeLabel p_id = CGRAPH_LABELS_ALL;
+    CGraphNode o_id = CGRAPH_NODES_ALL;
+    if (sparqlArg.subject != NULL) {
+        s_id = cgraphr_locate_node(g, sparqlArg.subject);
+        if (s_id == -1) {
+            goto empty_answer;
+        }
+    }
+    if (sparqlArg.predicate != NULL) {
+        p_id = cgraphr_locate_edge_label(g, sparqlArg.predicate);
+        if (p_id == -1) {
+            goto empty_answer;
+        }
+    }
+    if (sparqlArg.object != NULL) {
+        o_id = cgraphr_locate_node(g, sparqlArg.object);
+        if (o_id == -1) {
+            goto empty_answer;
+        }
+    }
+
+    CGraphNode nodes[] = {s_id, o_id};
+    do_search(g, 2, p_id, nodes, existence_query, predicate_query, false, false, &ls);
+
+    empty_answer:;  // position to jump to, if lookup failed.
+    size_t json_length = 1024 + ls.len * 100;  // Adjust size if needed
+    char *json = malloc(json_length);
+    signed int json_current_position = 0;
+    signed int json_additionally_written = 0;
+    // S is the char array to build string at, L is S length, CP is the current working position, AW the number of last added symbols, F the snprintf format string and all additional arguments are passed to snprintf.
+#define json_append(S, L, CP, AW, F, ...) do { \
+        snprintf(S + CP, L - CP, F "%n", ##__VA_ARGS__, &AW); \
+        CP += AW; \
+    } while (0)
+
+    json_append(json, json_length, json_current_position, json_additionally_written, "{ \"head\": { \"vars\": [ %s%s%s%s%s ] }, \"results\": { \"bindings\": [",
+             (sparqlArg.output_s ? "\"s\"" : ""),
+             (sparqlArg.output_s && (sparqlArg.output_p || sparqlArg.output_o) ? ", " : ""), // Only add a comma if s and (p or o) are written.
+             (sparqlArg.output_p ? "\"p\"" : ""),
+             (sparqlArg.output_p && sparqlArg.output_o ? ", " : ""), // Only add a comma if p and o are written.
+             (sparqlArg.output_o ? "\"o\"" : ""));
+
+    char* subj, *pred, *obje;
+    for(size_t i = 0; i < ls.len; i++) {
+        json_append(json, json_length, json_current_position, json_additionally_written, "{");
+
+
+        if (sparqlArg.output_s) {
+            subj = cgraphr_extract_node(g, ls.data[i].nodes[0], NULL);
+            json_append(json, json_length, json_current_position, json_additionally_written, "\"s\": %s", subj);
+            free(subj);
+
+            if (sparqlArg.output_p || sparqlArg.output_o)
+            {
+                json_append(json, json_length, json_current_position, json_additionally_written, ", ");
+            }
+        }
+        if (sparqlArg.output_p) {
+            pred = cgraphr_extract_edge_label(g, ls.data[i].label, NULL);
+            json_append(json, json_length, json_current_position, json_additionally_written, "\"p\": %s", pred);
+            free(pred);
+
+            if (sparqlArg.output_o)
+            {
+                json_append(json, json_length, json_current_position, json_additionally_written, ", ");
+            }
+        }
+        if (sparqlArg.output_o) {
+            obje = cgraphr_extract_node(g, ls.data[i].nodes[1], NULL);
+            json_append(json, json_length, json_current_position, json_additionally_written, "\"o\": %s", obje);
+            free(obje);
+        }
+
+        json_append(json, json_length, json_current_position, json_additionally_written, "}");
+        if (i < ls.len - 1) {
+            json_append(json, json_length, json_current_position, json_additionally_written, ", ");
+        }
+    }
+    json_append(json, json_length, json_current_position, json_additionally_written, "] } }");
+
+    *ptr = NULL; /* clear context pointer */
+    response = MHD_create_response_from_buffer(json_current_position,
+                                               (void *) json,
+                                               MHD_RESPMEM_PERSISTENT);
+    ret = MHD_queue_response(connection,
+                             MHD_HTTP_OK,
+                             response);
+
+    for (int i = 0; i < ls.len; i++)
+    {
+        free(ls.data[i].nodes);
+    }
+    if(ls.data)
+        free(ls.data);
+    MHD_destroy_response(response);
+    free(json);
+    return ret;
+}
+#endif
 
 static int do_read(const char* input, const CGraphArgs* argd) {
 	CGraphR* g = cgraphr_init(input);
@@ -1357,56 +1525,36 @@ static int do_read(const char* input, const CGraphArgs* argd) {
                 break;
             }
 
-            if (exist_query) {
-                bool exists = cgraphr_edge_exists(g, arg.rank, arg.label, arg.nodes, argd->params.no_hyperedge_order);
-                printf("%d\n", exists ? 1 : 0);
-                res = 0;
-                break;
-            }
-            CGraphEdgeIterator* it;
-            if (predicate_query)
+            EdgeList ls = {0};
+            bool has_result = do_search(g, arg.rank, arg.label, arg.nodes, exist_query, predicate_query, argd->params.no_hyperedge_order, argd->params.sort_result, &ls);
+
+            if (exist_query)
             {
-                it = cgraphr_edges_by_predicate(g, arg.label);
+                printf("%d\n", has_result ? 1 : 0);
             }
             else
             {
-                it = cgraphr_edges(g, arg.rank, arg.label, arg.nodes, argd->params.no_hyperedge_order) ;
-            }
-
-            if(!it)
-                break;
-
-            CGraphEdge n;
-            EdgeList ls = {0}; // list is empty
-            while(cgraphr_edges_next(it, &n))
-                edge_append(&ls, &n);
-
-            // sort the edges
-            if (argd->params.sort_result)
-            {
-                qsort(ls.data, ls.len, sizeof(CGraphEdge), cmp_edge);
-            }
-
-            for(size_t i = 0; i < ls.len; i++) {
-                printf("(%" PRId64, ls.data[i].label);
-                for (CGraphRank j = 0; j < ls.data[i].rank; j++) {
-                    printf(",\t%" PRId64, ls.data[i].nodes[j]);
+                for(size_t i = 0; i < ls.len; i++) {
+                    printf("(%" PRId64, ls.data[i].label);
+                    for (CGraphRank j = 0; j < ls.data[i].rank; j++) {
+                        printf(",\t%" PRId64, ls.data[i].nodes[j]);
+                    }
+                    printf(")\n");
                 }
-                printf(")\n");
-            }
 
-            if (argd->verbose)
-            {
-                printf("Found %zu results", ls.len);
-            }
+                if (argd->verbose)
+                {
+                    printf("Found %zu results", ls.len);
+                }
 
-            for (int i = 0; i < ls.len; i++)
-            {
-                free(ls.data[i].nodes);
-            }
-            if(ls.data)
-                free(ls.data);
+                for (int i = 0; i < ls.len; i++)
+                {
+                    free(ls.data[i].nodes);
+                }
+                if(ls.data)
+                    free(ls.data);
 
+            }
             res = 0;
             break;
         }
