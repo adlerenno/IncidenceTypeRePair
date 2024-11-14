@@ -1306,7 +1306,7 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
     }
 
     CGraphNode nodes[] = {s_id, o_id};
-    do_search(g, 2, p_id, nodes, existence_query, predicate_query, false, false, &ls);
+    bool found = do_search(g, 2, p_id, nodes, existence_query, predicate_query, false, false, &ls);
 
     empty_answer:;  // position to jump to, if lookup failed.
     if (argd->verbose)
@@ -1331,12 +1331,16 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
              (sparqlArg.output_o ? "\"o\"" : ""));
 
     char* subj, *pred, *obje;
-    for(size_t i = 0; i < ls.len; i++) {
+    for(size_t i = 0; i < ls.len || (existence_query && found && i == 0); i++) {
         json_append(json, json_length, json_current_position, json_additionally_written, "{");
 
 
         if (sparqlArg.output_s) {
-            subj = cgraphr_extract_node(g, ls.data[i].nodes[0], NULL);
+            if (sparqlArg.subject != NULL) {
+                subj = sparqlArg.subject;
+            } else {
+                subj = cgraphr_extract_node(g, ls.data[i].nodes[0], NULL);
+            }
             json_append(json, json_length, json_current_position, json_additionally_written, "\"s\": %s", subj);
             free(subj);
 
@@ -1346,7 +1350,11 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
             }
         }
         if (sparqlArg.output_p) {
-            pred = cgraphr_extract_edge_label(g, ls.data[i].label, NULL);
+            if (sparqlArg.predicate != NULL) {
+                pred = sparqlArg.predicate;
+            } else {
+                pred = cgraphr_extract_edge_label(g, ls.data[i].label, NULL);
+            }
             json_append(json, json_length, json_current_position, json_additionally_written, "\"p\": %s", pred);
             free(pred);
 
@@ -1356,7 +1364,11 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
             }
         }
         if (sparqlArg.output_o) {
-            obje = cgraphr_extract_node(g, ls.data[i].nodes[1], NULL);
+            if (sparqlArg.object) {
+                obje = sparqlArg.object;
+            } else {
+                obje = cgraphr_extract_node(g, ls.data[i].nodes[1], NULL);
+            }
             json_append(json, json_length, json_current_position, json_additionally_written, "\"o\": %s", obje);
             free(obje);
         }
