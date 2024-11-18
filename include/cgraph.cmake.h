@@ -66,8 +66,10 @@ typedef struct {
     bool sort_result;
 
     ///////////// WebService Parameters ////////////
+#ifdef WEB_SERVICE
     // Port the webserver uses.
     uint16_t port;
+#endif
 } CGraphCParams;
 
 /**

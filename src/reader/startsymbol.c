@@ -204,14 +204,11 @@ static inline int get_edge(StartSymbolNeighborhood* n, uint64_t e, StEdge* edge)
 	int indx[RANK_MAX]; // The index function
 	int i_len = if_get(s, ix, indx); // length of the index function
 
-	uint64_t nodes_order[RANK_MAX]; // We prealloc on the stack because our rank is limited to RANK_MAX
 	for(int j = 0; j < i_len; j++)
-		nodes_order[j] = nodes[indx[j]];
+        edge->nodes[j] = nodes[indx[j]];
 	free(nodes);
-
 	edge->label = label;
 	edge->rank = i_len;
-	memcpy(edge->nodes, nodes_order, i_len * sizeof(uint64_t)); // copy the nodes of "nodes_order" to the edge via memcpy
 	return 1;
 }
 

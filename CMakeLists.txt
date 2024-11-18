@@ -130,6 +130,6 @@ if(CLI)
 
 
   if(TRACE_SYMBOLS)
-    target_link_options(cgraph-cli PRIVATE -rdynamic)
+    target_link_options(${PROJECT_NAME}-cli PRIVATE -rdynamic)
   endif()
 endif()

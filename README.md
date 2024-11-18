@@ -84,7 +84,7 @@ Usage: cgraph-cli
        --sampling      [sampling]       sampling value of the dictionary; a value of 0 disables sampling (default: 32)
        --no-rle                         disable run-length encoding
        --no-table                       do not add an extra table to speed up the decompression of the neighborhood for an specific label
-       --rrr                            use bitsequences based on R. Raman, V. Raman, and S. S. Rao [experimental]
+       --rrr                            use bitsequences based on R. Raman, V. Raman, and S. S. Rao [experimental] (needs -DWITH_RRR=on)
                                         --factor can also be applied to this type of bit sequences
 
 
@@ -117,7 +117,9 @@ Usage: cgraph-cli
                                         Note that it is not allowed to pass no label and no nodes to this function.
                                         Use --decompress in this case.
        --node-count                     returns the number of nodes in the graph
-       --edge-labels                    returns the number of different edge labels in the graph\n"
+       --edge-labels                    returns the number of different edge labels in the graph
+       --port          [port]           starts the web-service at the given port. Webserver can be queried via easy SPARQL. (needs -DWEB_SERVICE=on)
+       "
 ```
 
 The command-line-tool allows via serd the Turtle, TriG, NTriples and NQuads formats for RDF-graphs. Additionally, there is a parser for hypergraphs. 
@@ -130,3 +132,28 @@ so numbers would be inserted as names into the dictionary and the internally use
 ## Library
 
 To use Incidence-Type-RePair as a library, in the include folder is the corresponding header file with the methods supported by the library.
+
+## SPARQL Webservice
+
+Given a compressed file F, start the webserver for that file using ```--port 8080```. 
+The value ```0``` can be used to let the system decide, which port it should use.
+Both GET and POST are supported for Queries. An example GET Query is:
+
+```http://localhost:8080/?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%2004%20.%20}```
+
+The Syntax very strict for the query ```SELECT ?s ?p ?o WHERE { ?s ?p 04 . }```: 
+The first 6 letters need to be ```SELECT```. If you write the Query in quotation marks, it will fail. 
+If there is no ```WHERE``` or no brackets, it will fail. 
+The ```?s``` terms after ```SELECT``` determine only, if it will be part of the output, not the order, so ```?p ?o ?s``` will be output still as S P O order.
+If only ```?p ?o``` is given, it will only output P and O.
+In the WHERE, there is exactly one triple allowed. A value can be set, like 04, or unbound. 
+In the second case, it must be a question mark followed by the s, p or o, depending on what is unbound.
+
+Failures are always result in a no return by HTTPS.
+
+In all successful cases, the webserver returns a JSON-File containing the (possibly empty) answer to the query.
+
+On the jamendo dataset, the above query will return
+
+```{ "head": { "vars": [ "s", "p", "o" ] }, "results": { "bindings": [{"s": http://dbtune.org/jamendo/track/10174, "p": http://purl.org/dc/elements/1.1/title, "o": 04}, {"s": http://dbtune.org/jamendo/track/35678, "p": http://purl.org/dc/elements/1.1/title, "o": 04}] } }```
+

@@ -53,8 +53,11 @@ static void print_usage(bool error) {
 	"       --no-rle                         disable run-length encoding\n"
 	"       --no-table                       do not add an extra table to speed up the decompression of the edges for an specific label\n"
 #ifdef RRR
-	"       --rrr                            use bitsequences based on R. Raman, V. Raman, and S. S. Rao [experimental]\n"
-	"                                        --factor can also be applied to this type of bit sequences\n"
+    "    --rrr                               use bitsequences based on R. Raman, V. Raman, and S. S. Rao [experimental]\n"
+    "                                        --factor can also be applied to this type of bit sequences\n"
+#endif
+#ifndef RRR
+    "    --rrr                               not available. Recompile with -DWITH_RRR=on\n"
 #endif
 	"\n"
 	" * to read a compressed RDF graph:\n"
@@ -90,6 +93,12 @@ static void print_usage(bool error) {
     "         --sort-result                  sort the resulting edges using quicksort."
 	"       --node-count                     returns the number of nodes in the graph\n"
 	"       --edge-labels                    returns the number of different edge labels in the graph\n"
+#ifdef WEB_SERVICE
+    "       --port          [port]           starts the web-service at the given port. Webserver can be queried via easy SPARQL.\n"
+#endif
+#ifndef WEB_SERVICE
+    "       --port          [port]           not available. Recompile with -DWEB_SERVICE=on\n"
+#endif
 	;
 
 	FILE* os = error ? stderr : stdout;
@@ -1090,7 +1099,9 @@ int parse_sparql_arg(const char *query, SPARQLArg *arg, bool *existence_query, b
     } else {
         *predicate_query = false;
         *decompression_query = false;
-        arg->subject = token;
+        char *s = malloc(strlen(token));
+        strcpy(s, token);
+        arg->subject = s;
     }
     token = strtok(NULL, SPARQL_WHITESPACE_CHARS);
     if (strcmp(token, "?p") == 0) {
@@ -1098,7 +1109,9 @@ int parse_sparql_arg(const char *query, SPARQLArg *arg, bool *existence_query, b
         arg->predicate = NULL;
     } else {
         *decompression_query = false;
-        arg->predicate = token;
+        char *s = malloc(strlen(token));
+        strcpy(s, token);
+        arg->predicate = s;
     }
     token = strtok(NULL, SPARQL_WHITESPACE_CHARS);
     if (strcmp(token, "?o") == 0) {
@@ -1107,7 +1120,9 @@ int parse_sparql_arg(const char *query, SPARQLArg *arg, bool *existence_query, b
     } else {
         *predicate_query = false;
         *decompression_query = false;
-        arg->object = token;
+        char *s = malloc(strlen(token));
+        strcpy(s, token);
+        arg->object = s;
     }
     return 0;
 }
@@ -1274,11 +1289,13 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
         return MHD_NO;
     }
 
-    SPARQLArg sparqlArg;
+    SPARQLArg *sparqlArg = malloc(sizeof (SPARQLArg));
+    if (sparqlArg == NULL)
+        return MHD_NO;
     bool existence_query, predicate_query, decompression_query;
 
     // Checks for correct parsing here.
-    if (parse_sparql_arg(sparql_query, &sparqlArg, &existence_query, &predicate_query, &decompression_query) != 0) {
+    if (parse_sparql_arg(sparql_query, sparqlArg, &existence_query, &predicate_query, &decompression_query) != 0) {
         return MHD_NO;
     }
 
@@ -1286,20 +1303,20 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
     CGraphNode s_id = CGRAPH_NODES_ALL;
     CGraphEdgeLabel p_id = CGRAPH_LABELS_ALL;
     CGraphNode o_id = CGRAPH_NODES_ALL;
-    if (sparqlArg.subject != NULL) {
-        s_id = cgraphr_locate_node(g, sparqlArg.subject);
+    if (sparqlArg->subject != NULL) {
+        s_id = cgraphr_locate_node(g, sparqlArg->subject);
         if (s_id == -1) {
             goto empty_answer;
         }
     }
-    if (sparqlArg.predicate != NULL) {
-        p_id = cgraphr_locate_edge_label(g, sparqlArg.predicate);
+    if (sparqlArg->predicate != NULL) {
+        p_id = cgraphr_locate_edge_label(g, sparqlArg->predicate);
         if (p_id == -1) {
             goto empty_answer;
         }
     }
-    if (sparqlArg.object != NULL) {
-        o_id = cgraphr_locate_node(g, sparqlArg.object);
+    if (sparqlArg->object != NULL) {
+        o_id = cgraphr_locate_node(g, sparqlArg->object);
         if (o_id == -1) {
             goto empty_answer;
         }
@@ -1324,53 +1341,59 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
     } while (0)
 
     json_append(json, json_length, json_current_position, json_additionally_written, "{ \"head\": { \"vars\": [ %s%s%s%s%s ] }, \"results\": { \"bindings\": [",
-             (sparqlArg.output_s ? "\"s\"" : ""),
-             (sparqlArg.output_s && (sparqlArg.output_p || sparqlArg.output_o) ? ", " : ""), // Only add a comma if s and (p or o) are written.
-             (sparqlArg.output_p ? "\"p\"" : ""),
-             (sparqlArg.output_p && sparqlArg.output_o ? ", " : ""), // Only add a comma if p and o are written.
-             (sparqlArg.output_o ? "\"o\"" : ""));
+             (sparqlArg->output_s ? "\"s\"" : ""),
+             (sparqlArg->output_s && (sparqlArg->output_p || sparqlArg->output_o) ? ", " : ""), // Only add a comma if s and (p or o) are written.
+             (sparqlArg->output_p ? "\"p\"" : ""),
+             (sparqlArg->output_p && sparqlArg->output_o ? ", " : ""), // Only add a comma if p and o are written.
+             (sparqlArg->output_o ? "\"o\"" : ""));
 
     char* subj, *pred, *obje;
     for(size_t i = 0; i < ls.len || (existence_query && found && i == 0); i++) {
         json_append(json, json_length, json_current_position, json_additionally_written, "{");
 
 
-        if (sparqlArg.output_s) {
-            if (sparqlArg.subject != NULL) {
-                subj = sparqlArg.subject;
+        if (sparqlArg->output_s) {
+            if (sparqlArg->subject != NULL) {
+                subj = sparqlArg->subject;
             } else {
                 subj = cgraphr_extract_node(g, ls.data[i].nodes[0], NULL);
             }
             json_append(json, json_length, json_current_position, json_additionally_written, "\"s\": %s", subj);
-            free(subj);
+            if (!sparqlArg->subject) {
+                free(subj);
+            }
 
-            if (sparqlArg.output_p || sparqlArg.output_o)
+            if (sparqlArg->output_p || sparqlArg->output_o)
             {
                 json_append(json, json_length, json_current_position, json_additionally_written, ", ");
             }
         }
-        if (sparqlArg.output_p) {
-            if (sparqlArg.predicate != NULL) {
-                pred = sparqlArg.predicate;
+        if (sparqlArg->output_p) {
+            if (sparqlArg->predicate != NULL) {
+                pred = sparqlArg->predicate;
             } else {
                 pred = cgraphr_extract_edge_label(g, ls.data[i].label, NULL);
             }
             json_append(json, json_length, json_current_position, json_additionally_written, "\"p\": %s", pred);
-            free(pred);
+            if (!sparqlArg->predicate) {
+                free(pred);
+            }
 
-            if (sparqlArg.output_o)
+            if (sparqlArg->output_o)
             {
                 json_append(json, json_length, json_current_position, json_additionally_written, ", ");
             }
         }
-        if (sparqlArg.output_o) {
-            if (sparqlArg.object) {
-                obje = sparqlArg.object;
+        if (sparqlArg->output_o) {
+            if (sparqlArg->object) {
+                obje = sparqlArg->object;
             } else {
                 obje = cgraphr_extract_node(g, ls.data[i].nodes[1], NULL);
             }
             json_append(json, json_length, json_current_position, json_additionally_written, "\"o\": %s", obje);
-            free(obje);
+            if (!sparqlArg->object) {
+                free(obje);
+            }
         }
 
         json_append(json, json_length, json_current_position, json_additionally_written, "}");
@@ -1380,6 +1403,8 @@ generate_server_answer(void *cls, struct MHD_Connection *connection, const char 
     }
     json_append(json, json_length, json_current_position, json_additionally_written, "] } }");
 
+    free(sparqlArg->subject); free(sparqlArg->predicate); free(sparqlArg->object);
+    free(sparqlArg);
     *ptr = NULL; /* clear context pointer */
     response = MHD_create_response_from_buffer(json_current_position,
                                                (void *) json,
