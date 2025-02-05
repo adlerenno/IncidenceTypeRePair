@@ -148,6 +148,36 @@ void cgraphw_destroy(CGraphW* g);
 CGRAPH_API
 int cgraphw_add_edge(CGraphW* g, const CGraphRank rank, const char* label, const char** nodes);
 
+
+/**
+ * Adds a new edge to the graph.
+ * The two nodes and the edge label must be a 0-byte terminated string.
+ * So strings with value NULL are not allowed.
+ *
+ * @param g Handler of the graph compressor.
+ * @param n1 Source node of the edge.
+ * @param n2 Destination node of the edge.
+ * @param label Label of the edge.
+ * @return 0, if no errors occurred, otherwise -1.
+ */
+CGRAPH_API
+CGraphNode cgraphw_put_label(CGraphW* g, const char* label, bool node);
+
+
+/**
+ * Adds a new edge to the graph.
+ * The two nodes and the edge label must be a 0-byte terminated string.
+ * So strings with value NULL are not allowed.
+ *
+ * @param g Handler of the graph compressor.
+ * @param n1 Source node of the edge.
+ * @param n2 Destination node of the edge.
+ * @param label Label of the edge.
+ * @return 0, if no errors occurred, otherwise -1.
+ */
+CGRAPH_API
+int cgraphw_add_edge_id(CGraphW* g, const CGraphRank rank, CGraphRank label, CGraphNode* nodes);
+
 /**
  * Adds a new node to the graph.
  * The node must be a 0-byte terminated string.
@@ -171,6 +201,15 @@ int cgraphw_add_node(CGraphW* g, const char* n);
  */
 CGRAPH_API
 void cgraphw_set_params(CGraphW* g, const CGraphCParams* p);
+
+/**
+ * Sets the flag to avoid reordering the node label ids.
+ * Must be done before compressing or writing the graph.
+ *
+ * @param g Handler of the graph compressor.
+ */
+CGRAPH_API
+void cgraphw_set_param_no_node_labels(CGraphW* g);
 
 /**
  * Compresses the internal graph structure with RePair.

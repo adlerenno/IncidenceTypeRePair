@@ -7,17 +7,17 @@
 #define CONSTANTS_H
 
 // Default maximum rank of RePair
-#define DEFAULT_MAX_RANK 12
+#define DEFAULT_MAX_RANK 128
 #define LIMIT_MAX_RANK 128
 
 // Default paramer if monograms should be replaced
-#define DEFAULT_MONOGRAMS false
+#define DEFAULT_MONOGRAMS (false)
 
 // Default factor for bitsequences
-#define DEFAULT_FACTOR 8
+#define DEFAULT_FACTOR 64
 
 // Default sampling value for the dictionary
-#define DEFAULT_SAMPLING 32
+#define DEFAULT_SAMPLING 0
 
 // Default parameter if the Run-Length-Encoding is used
 #define DEFAULT_RLE (true)

@@ -73,19 +73,19 @@ Usage: cgraph-cli
 
    optional options:
     -f,--format        [format]         format of the RDF graph; keep empty to auto detect the format
-                                        possible values: "turtle", "ntriples", "nquads", "trig", "hyperedge"
+                                        possible values: "turtle", "ntriples", "nquads", "trig", "hyperedge", "cornell_hypergraph"
        --overwrite                      overwrite if the output file exists
     -v,--verbose                        print advanced information
 
    options to influence the resulting size and the runtime to browse the graph (optional):
-       --max-rank      [rank]           maximum rank of edges, set to 0 to remove limit (default: 12)
-       --monograms                      enable the replacement of monograms
-       --factor        [factor]         number of blocks of a bit sequence that are grouped into a superblock (default: 8)
-       --sampling      [sampling]       sampling value of the dictionary; a value of 0 disables sampling (default: 32)
+       --max-rank      [rank]           maximum rank of edges, set to 0 to remove limit (default: 128)
+       --monograms                      enable the replacement of monograms (default: false)
+       --factor        [factor]         number of blocks of a bit sequence that are grouped into a superblock (default: 64)
+       --sampling      [sampling]       sampling value of the dictionary; a value of 0 disables sampling (default: 0)
        --no-rle                         disable run-length encoding
        --no-table                       do not add an extra table to speed up the decompression of the neighborhood for an specific label
        --rrr                            use bitsequences based on R. Raman, V. Raman, and S. S. Rao [experimental] (needs -DWITH_RRR=on)
-                                        --factor can also be applied to this type of bit sequences
+                                        --factor is also applied to this type of bit sequences
 
 
  * to read a compressed RDF graph:
@@ -122,12 +122,26 @@ Usage: cgraph-cli
        "
 ```
 
-The command-line-tool allows via serd the Turtle, TriG, NTriples and NQuads formats for RDF-graphs. Additionally, there is a parser for hypergraphs. 
+The command-line-tool allows via serd the Turtle, TriG, NTriples and NQuads formats for RDF-graphs. 
+
+Additionally, there is a parser for hypergraphs. 
 The formatting of a hypergraph file is one edge per line, 
 each line starts with the label of the edge and is followed by the name of the nodes. 
 The elements in a line can be separated by a white space or a tab. 
 Note that the nodes are treated as named, 
 so numbers would be inserted as names into the dictionary and the internally used numbers can differ.
+
+A more flexibel parser for 'cornell' hypergraphs exists designed for the [hypergraphs with labeled nodes from cs.cornell.edu](https://www.cs.cornell.edu/~arb/data/).
+There are three mandatory files: The hyperedges- file contains comma seperated lists of node IDs, one hyperedge per line.
+The label-names- file takes contains the string labels of the node classes.
+The node-labels- file contains one integer per line assigning one class to each node. The classes are represented by rank-1 edges by ITR.
+Optionally, the node-names- file, which contains a unique node name per node.
+To properly call this, you need to give the filename without any prefix, so for example contact-primary-school.txt and ITR will find the files accordingly.
+There are some important things to know for querying the generated file:
+First, the node classes start at 0, so the rank-1 edges for the node classes have lower edge labels assigned by ITR than the hyperedges. 
+This is due to the fact that the hyperedges do not have edge labels using this parser. 
+All hyperedges of the same rank have the same label, different ranks have different labels. 
+The labels follow consequently by size after the rank-1 edges.
 
 ## Library
 

@@ -29,6 +29,7 @@ typedef struct {
 
 	Treemap* dict_ve; // dictionary which contains nodes and edges
 	bool dict_disjunct;
+    bool all_nodes_and_edges_have_labels;
 
 	size_t nodes;
 	size_t terminals;
@@ -121,6 +122,7 @@ CGraphW* cgraphw_init() {
 
 	g->dict_ve = dict_ve;
 	g->dict_disjunct = true;
+    g->all_nodes_and_edges_have_labels = true;
 	g->nodes = 0;
 	g->terminals = 0;
 
@@ -136,6 +138,12 @@ err_1:
 err_0:
 	treemap_destroy(dict_ve);
 	return NULL;
+}
+
+void cgraphw_set_param_no_node_labels(CGraphW* g)
+{
+    GraphWriterImpl* gi = (GraphWriterImpl *) g;
+    gi->all_nodes_and_edges_have_labels = false;
 }
 
 void cgraphw_destroy(CGraphW* g) {
@@ -235,6 +243,45 @@ int cgraphw_add_edge(CGraphW* g, const CGraphRank rank, const char* label, const
 	return 0;
 }
 
+// Better use above method, but it is possible to use the following 2:
+
+CGraphNode cgraphw_put_label(CGraphW* g, const char* label, bool node) {
+    GraphWriterImpl* gi = (GraphWriterImpl*) g;
+
+    // cannot add new edges if the graph is compressed
+    if(gi->compressed)
+        return -1;
+
+    return dict_put_text(gi, label, node);
+}
+
+int cgraphw_add_edge_id(CGraphW* g, const CGraphRank rank, CGraphRank label, CGraphNode* nodes) {
+    GraphWriterImpl* gi = (GraphWriterImpl*) g;
+
+    // cannot add new edges if the graph is compressed
+    if(gi->compressed)
+        return -1;
+
+    // The memory of the edge is allocated via `alloca` because `hashmap` copies the data internally
+    // and then manages the memory itself.
+    // Furthermore, a short call to `alloca` is more efficient than `malloc` + `free`.
+    HEdge* edge = alloca(hedge_sizeof(rank));
+    if(!edge)
+        return -1;
+    edge->rank = rank;
+
+    edge->label = (uint64_t) label;
+    for (size_t i = 0; i < rank; i++)
+    {
+        edge->nodes[i] = (uint64_t) nodes[i];
+    }
+
+    if(hashset_add(gi->edges, edge, hedge_sizeof(rank)) < 0)
+        return -1;
+
+    return 0;
+}
+
 int cgraphw_add_node(CGraphW* g, const char* n) {
 	GraphWriterImpl* gi = (GraphWriterImpl*) g;
 
@@ -307,6 +354,27 @@ static int cgraph_set_bitsequences(GraphWriterImpl* g, BitArray* bv, BitArray* b
 		}
 	}
 
+    if (!g->all_nodes_and_edges_have_labels) {
+        // TODO: Find a better way to get the nodes and terminals here.
+        HashsetIterator hit;
+        hashset_iter(g->edges, &hit);
+        const HEdge *edge;
+        size_t len_val;
+        unsigned long nodes = g->nodes;
+        unsigned long terminals = g->terminals;
+        for (size_t i = 0; (edge = hashset_iter_next(&hit, &len_val)); i++) {
+            if (terminals < edge->label + 1)
+                terminals = edge->label + 1;
+            for (CGraphRank j = 0; j < edge->rank; j++) {
+                if (nodes < edge->nodes[j] + 1)
+                    nodes = edge->nodes[j] + 1;
+
+            }
+        }
+        g->terminals = terminals;
+        g->nodes = nodes;
+    }
+
 	return 0;
 }
 
@@ -369,25 +437,39 @@ static HGraph* cgraphw_modify_ids(GraphWriterImpl* g , BitArray* bv, BitArray* b
 		if(!e)
 			goto err_2;
 
-		if((tmp = dict_index(new_ids, edge->label)) == -1) // determine the index in the whole dict, comparing unsigned value
-			goto err_2;
+        if ((tmp = dict_index(new_ids, edge->label)) != -1) // determine the index in the whole dict, comparing unsigned value
+            e->label = (!disjunct ? bitsequence_rank1(&bs_e, tmp) : bitsequence_rank0(&bs_v, tmp)) - 1;
+        else if (!g->all_nodes_and_edges_have_labels)
+            e->label = edge->label;  // If not found in the dictionary, keep the old one because it was set without label range.
+        else
+            goto err_2;
 
-		// determine the value in the edge label dict
-		e->label = (!disjunct ? bitsequence_rank1(&bs_e, tmp) : bitsequence_rank0(&bs_v, tmp)) - 1;
-		e->rank = edge->rank;
 
-		for(size_t j = 0; j < edge->rank; j++) {
-			if((tmp = dict_index(new_ids, edge->nodes[j])) == -1) // determine the index in the whole dict, comparing unsigned value
-				goto err_2;
 
-			e->nodes[j] = bitsequence_rank1(&bs_v, tmp) - 1; // determine the value in the node label dict
-		}
+        // determine the value in the edge label dict
+        e->rank = edge->rank;
 
-		if(hgraph_add_edge(gr, e) < 0) {
-			free(e);
-			goto err_2;
-		}
-	}
+        if (g->all_nodes_and_edges_have_labels) {
+            for (size_t j = 0; j < edge->rank; j++) {
+                if ((tmp = dict_index(new_ids, edge->nodes[j])) ==
+                    -1) // determine the index in the whole dict, comparing unsigned value
+                    goto err_2;
+
+                e->nodes[j] = bitsequence_rank1(&bs_v, tmp) - 1; // determine the value in the node label dict
+            }
+        }
+        else
+        {
+            for (size_t j = 0; j < edge->rank; j++) {
+                e->nodes[j] = edge->nodes[j]; // determine the value in the node label dict
+            }
+        }
+
+        if(hgraph_add_edge(gr, e) < 0) {
+            free(e);
+            goto err_2;
+        }
+    }
 
 	// sorting the edges enhances the compression
 	qsort(gr->edges, gr->len, sizeof(HEdge*), cmp_edge_sort);

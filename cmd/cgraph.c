@@ -470,6 +470,7 @@ static const Syntax syntaxes[] = {
 	{SERD_NQUADS, "nquads", ".nq"},
 	{SERD_TRIG, "trig", ".trig"},
     {(SerdSyntax) 5, "hyperedge", ".hyperedge"},
+    {(SerdSyntax) 6, "cornell_hypergraph", ".txt"},
 	{(SerdSyntax) 0, NULL, NULL}
 };
 
@@ -540,7 +541,7 @@ static SerdStatus error_sink(void* handle, const SerdError* error) {
 	return SERD_SUCCESS;
 }
 
-static int rdf_parse(const uint8_t* filename, SerdSyntax syntax, CGraphW* g) {
+static int rdf_parse(const char* filename, SerdSyntax syntax, CGraphW* g) {
 	int res = -1;
 
 	SerdURI base_uri = SERD_URI_NULL;
@@ -554,7 +555,7 @@ static int rdf_parse(const uint8_t* filename, SerdSyntax syntax, CGraphW* g) {
 	ctx.env = env;
 	ctx.handler = g;
 
-	base = serd_node_new_file_uri(filename, NULL, &base_uri, true);
+	base = serd_node_new_file_uri((uint8_t *) filename, NULL, &base_uri, true);
 
 	SerdReader* reader = serd_reader_new(syntax, &ctx, free_handle, base_sink, prefix_sink, statement_sink, end_sink);
 	if(!reader)
@@ -565,11 +566,11 @@ static int rdf_parse(const uint8_t* filename, SerdSyntax syntax, CGraphW* g) {
 	bool err = false;
 	serd_reader_set_error_sink(reader, error_sink, &err);
 
-	FILE* in_fd = fopen((const char*) filename, "r");
+	FILE* in_fd = fopen(filename, "r");
 	if(!in_fd)
 		goto exit_1;
 
-	SerdStatus status = serd_reader_start_stream(reader, in_fd, filename, false);
+	SerdStatus status = serd_reader_start_stream(reader, in_fd, (uint8_t *) filename, false);
 	while(status == SERD_SUCCESS)
 		status = serd_reader_read_chunk(reader);
 
@@ -589,7 +590,7 @@ exit_0:
 }
 
 #define MAX_LINE_LENGTH (8*LIMIT_MAX_RANK)  // With 8, it gives 1024 for a max_rank of 128.
-static int hyperedge_parse(const uint8_t* filename, SerdSyntax syntax, CGraphW* g) {
+static int hyperedge_parse(const char* filename, SerdSyntax syntax, CGraphW* g) {
     int res = -1;
 
     bool err = false;
@@ -608,7 +609,7 @@ static int hyperedge_parse(const uint8_t* filename, SerdSyntax syntax, CGraphW* 
         char* token = strtok(line, " \t\n"); //Use empty space, tab, and newline as delimiter.
         while (token != NULL) {
             n[cn++] = token;
-            if (cn == 128)
+            if (cn == LIMIT_MAX_RANK)
                 return -1; //Allowed number of parameters are exceeded.
             token = strtok(NULL, " \t\n");
         }
@@ -618,6 +619,114 @@ static int hyperedge_parse(const uint8_t* filename, SerdSyntax syntax, CGraphW* 
     }
 
     fclose(in_fd);
+
+    if(!err)
+        res = 0;
+
+    return res;
+}
+
+void prepend_text_to_filename(const char *file_path, const char *text, char *result) {
+    // Find the last occurrence of the directory separator '/'
+    const char *filename = strrchr(file_path, '/');
+
+    if (filename) {
+        // Include the '/' in the filename pointer
+        filename++;
+    } else {
+        // If no '/', the entire file_path is the filename
+        filename = file_path;
+    }
+
+    // Calculate the length of the directory path
+    size_t dir_length = filename - file_path;
+
+    // Copy the directory part to the result
+    strncpy(result, file_path, dir_length);
+    result[dir_length] = '\0';
+
+    // Append the text to the result
+    strcat(result, text);
+
+    // Append the filename to the result
+    strcat(result, filename);
+}
+
+#define MAX_LINE_LENGTH (8*LIMIT_MAX_RANK)  // With 8, it gives 1024 for a max_rank of 128.
+static int cornell_hyperedge_parse(const char* filename, SerdSyntax syntax, CGraphW* g) {
+    int res = -1;
+
+    bool err = false;
+    char line[MAX_LINE_LENGTH];
+
+    char* fname = malloc((12+strlen(filename)) * sizeof(char));
+
+    prepend_text_to_filename(filename, "label-names-", fname);
+    FILE* label_names_file = fopen((const char*) fname, "r");
+    if (!label_names_file)
+        return res;
+    CGraphNode max_rank_one_edge_label_count = -1;
+    while (fgets(line, sizeof(line), label_names_file) && !err) {
+        CGraphNode node_name = cgraphw_put_label(g, line, false);
+        max_rank_one_edge_label_count = node_name > max_rank_one_edge_label_count ? node_name : max_rank_one_edge_label_count;
+    }
+    fclose(label_names_file);
+
+    printf("- Require the first %lld edge labels to be rank 1 edges.\n", max_rank_one_edge_label_count);
+
+    prepend_text_to_filename(filename, "node-names-", fname);
+    FILE* node_names_file = fopen((const char*) fname, "r");
+    if (node_names_file)
+    {
+        while (fgets(line, sizeof(line), node_names_file) && !err) {
+            cgraphw_put_label(g, line, true);
+        }
+        fclose(node_names_file);
+    }
+    else
+    {
+        cgraphw_set_param_no_node_labels(g);
+    }
+
+    CGraphNode n[LIMIT_MAX_RANK];
+    prepend_text_to_filename(filename, "node-labels-", fname);
+    FILE* node_labels_file = fopen((const char*) fname, "r");
+
+    if(!node_labels_file)
+        return res;
+
+    CGraphNode cn = 0;
+    while (fgets(line, sizeof(line), node_labels_file) && !err) {
+        n[0] = cn++;
+        if (cgraphw_add_edge_id(g, 1, strtoll(line, NULL, 0)-1, n) < 0) { // Edge label is ID, Only Node is the id. -1, because the files are 1-based instead of 0-based.
+            err = true;
+        }
+    }
+    fclose(node_labels_file);
+
+    prepend_text_to_filename(filename, "hyperedges-", fname);
+    FILE* edge_file = fopen((const char*) fname, "r");
+
+    if(!edge_file)
+        return res;
+
+    cn = 0;
+    while (fgets(line, sizeof(line), edge_file) && !err) {
+        cn = 0;
+        // Process each line of the hyperedge file
+        // Split the line into individual items using strtok
+        char* token = strtok(line, " ,\t\n"); //Use empty space, tab, and newline as delimiter.
+        while (token != NULL) {
+            n[cn++] = strtoll(token, NULL, 0);
+            if (cn == LIMIT_MAX_RANK)
+                return -1; //Allowed number of parameters are exceeded.
+            token = strtok(NULL, " ,\t\n");
+        }
+        if (cgraphw_add_edge_id(g, cn, max_rank_one_edge_label_count + cn, n) < 0) { // TODO: Label is always cn for this parser, because we need labels depending on the rank.
+            err = true;
+        }
+    }
+    fclose(edge_file);
 
     if(!err)
         res = 0;
@@ -674,20 +783,29 @@ static int do_compress(const char* input, const char* output, const CGraphArgs* 
 
 	int res = -1;
 
-    if (syntax != 5)
+    if (syntax < 5)
     {
         if(argd->verbose)
             printf("Parsing RDF file %s\n", input);
-        if(rdf_parse((const uint8_t*) input, syntax, g) < 0) {
+        if(rdf_parse(input, syntax, g) < 0) {
             fprintf(stderr, "Failed to read file \"%s\".\n", input);
             goto exit_0;
         }
     }
-    else
+    else if (syntax == 5)
     {
         if(argd->verbose)
             printf("Parsing Hyperedge file %s\n", input);
-        if(hyperedge_parse((const uint8_t*) input, syntax, g) < 0) {
+        if(hyperedge_parse(input, syntax, g) < 0) {
+            fprintf(stderr, "Failed to read file \"%s\".\n", input);
+            goto exit_0;
+        }
+    }
+    else if (syntax == 6)
+    {
+        if(argd->verbose)
+            printf("Parsing Cornell Hyperedge file %s\n", input);
+        if(cornell_hyperedge_parse(input, syntax, g) < 0) {
             fprintf(stderr, "Failed to read file \"%s\".\n", input);
             goto exit_0;
         }
@@ -1099,7 +1217,7 @@ int parse_sparql_arg(const char *query, SPARQLArg *arg, bool *existence_query, b
     } else {
         *predicate_query = false;
         *decompression_query = false;
-        char *s = malloc(strlen(token));
+        char *s = malloc(strlen(token)+1);
         strcpy(s, token);
         arg->subject = s;
     }
@@ -1109,7 +1227,7 @@ int parse_sparql_arg(const char *query, SPARQLArg *arg, bool *existence_query, b
         arg->predicate = NULL;
     } else {
         *decompression_query = false;
-        char *s = malloc(strlen(token));
+        char *s = malloc(strlen(token)+1);
         strcpy(s, token);
         arg->predicate = s;
     }
@@ -1120,7 +1238,7 @@ int parse_sparql_arg(const char *query, SPARQLArg *arg, bool *existence_query, b
     } else {
         *predicate_query = false;
         *decompression_query = false;
-        char *s = malloc(strlen(token));
+        char *s = malloc(strlen(token)+1);
         strcpy(s, token);
         arg->object = s;
     }
