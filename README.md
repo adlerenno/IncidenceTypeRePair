@@ -26,7 +26,8 @@ If you have questions regarding the implementation, feel free to contact adleren
   - Using homebrew
     - brew install serd
   - Using apt-get
-    - sudo apt-get install libserd-0-0
+    - sudo apt install libserd-dev
+      - (sudo apt-get install libserd-0-0 does not work)
 
 - [libmicrohttpd]() needed by the webservice for the server
   - Using homebrew
